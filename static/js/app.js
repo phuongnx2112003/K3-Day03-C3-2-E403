@@ -184,10 +184,14 @@ async function handleSend(event) {
     sendBtn.disabled = true;
     sendBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
     
+    let requestTimeout;
     try {
+        const controller = new AbortController();
+        requestTimeout = setTimeout(() => controller.abort(), 25000);
         const response = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
                 query: query,
                 mode: currentMode
@@ -207,8 +211,9 @@ async function handleSend(event) {
     } catch (err) {
         console.error("Lỗi khi gửi AJAX chat:", err);
         removeMessage(loadingId);
-        appendErrorMessage("Không thể kết nối đến máy chủ Flask API!");
+        appendErrorMessage(err.name === "AbortError" ? "Yêu cầu mất quá 25 giây. Vui lòng thử lại hoặc chuyển sang Mock Provider." : "Không thể kết nối đến máy chủ Flask API!");
     } finally {
+        clearTimeout(requestTimeout);
         sendBtn.disabled = false;
         sendBtn.innerHTML = `<i class="fa-solid fa-arrow-up"></i>`;
         scrollToBottom();
@@ -292,6 +297,13 @@ function appendAIMessage(resData) {
                 <div><div>AGENT DỪNG Ở GIỚI HẠN SUY LUẬN</div><small style="font-weight: 400; color: var(--text-muted);">Đây không phải kết luận vi phạm quy chế. Hãy thử diễn đạt ngắn gọn hơn hoặc chọn một test case.</small></div>
             </div>`;
     }
+    if (resData.agent_status === "provider_unavailable") {
+        html += `
+            <div class="guardrail-alert" style="border-color: var(--color-danger); color: #ff8066;">
+                <i class="fa-solid fa-plug-circle-xmark"></i>
+                <div><div>PROVIDER TẠM THỜI KHÔNG KHẢ DỤNG</div><small style="font-weight: 400; color: var(--text-muted);">Agent đã dừng ngay khi provider báo lỗi để tránh lặp request và không hiển thị kết quả không được kiểm chứng.</small></div>
+            </div>`;
+    }
 
     // B. Render ReAct Steps (If any)
     if (resData.steps && resData.steps.length > 0) {
@@ -371,11 +383,59 @@ function clearChat() {
                     </div>
                 </div>
 
-                <div class="starter-card" onclick="selectStarterPrompt('Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ dựa trên catalog.', 'react')">
+                <div class="starter-card" onclick="selectStarterPrompt('Hãy cho em xem hồ sơ học tập fixture của sinh viên 2A202601874 và các môn đã hoàn thành.', 'react')">
+                    <div class="starter-icon text-cyan"><i class="fa-solid fa-id-card"></i></div>
+                    <div class="starter-info">
+                        <strong>Tra cứu hồ sơ sinh viên</strong>
+                        <span>Demo tool get_student_profile</span>
+                    </div>
+                </div>
+
+                <div class="starter-card" onclick="selectStarterPrompt('Trong catalog fixture, hãy tìm các môn thuộc hướng AI/ML và nêu prerequisite của từng môn.', 'react')">
+                    <div class="starter-icon text-purple"><i class="fa-solid fa-magnifying-glass"></i></div>
+                    <div class="starter-info">
+                        <strong>Khám phá catalog AI/ML</strong>
+                        <span>Demo tìm kiếm môn theo lĩnh vực</span>
+                    </div>
+                </div>
+
+                <div class="starter-card" onclick="selectStarterPrompt('Em có đủ điều kiện đăng ký COMP2050 không? Hãy kiểm tra theo hồ sơ fixture và giải thích môn tiên quyết còn thiếu nếu có.', 'react')">
+                    <div class="starter-icon" style="color: #f7b731;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <div class="starter-info">
+                        <strong>Phát hiện thiếu prerequisite</strong>
+                        <span>Demo từ chối COMP2050 an toàn</span>
+                    </div>
+                </div>
+
+                <div class="starter-card" onclick="selectStarterPrompt('Kiểm tra COMP2050 và COMP3020 có trùng lịch không. Chỉ kết luận dựa trên tool schedule.', 'react')">
+                    <div class="starter-icon" style="color: #f7b731;"><i class="fa-solid fa-clock"></i></div>
+                    <div class="starter-info">
+                        <strong>Kiểm tra trùng lịch</strong>
+                        <span>Demo phát hiện xung đột Wednesday</span>
+                    </div>
+                </div>
+
+                <div class="starter-card" onclick="selectStarterPrompt('Tính tải tín chỉ cho COMP1020, MATH2010 và STAT1010. Cho biết có đạt mức full-time không.', 'react')">
+                    <div class="starter-icon text-accent"><i class="fa-solid fa-scale-balanced"></i></div>
+                    <div class="starter-info">
+                        <strong>Kiểm tra tải tín chỉ</strong>
+                        <span>Demo cảnh báo dưới mức full-time</span>
+                    </div>
+                </div>
+
+                <div class="starter-card" onclick="selectStarterPrompt('Theo Academic Regulations, sinh viên full-time cần tối thiểu bao nhiêu tín chỉ? Hãy trả lời kèm tên tài liệu và số trang.', 'react')">
                     <div class="starter-icon text-purple"><i class="fa-solid fa-calendar-check"></i></div>
                     <div class="starter-info">
-                        <strong>Lập kế hoạch 15-18 TC AI/ML</strong>
-                        <span>Dùng fixture cục bộ, kiểm tra prerequisite & tải tín chỉ</span>
+                        <strong>Tra cứu Quy chế bằng Embedding</strong>
+                        <span>Tìm PDF chính thức và viện dẫn số trang</span>
+                    </div>
+                </div>
+
+                <div class="starter-card" onclick="selectStarterPrompt('Với hồ sơ và catalog fixture hiện tại, em có thể lập kế hoạch AI/ML 15 đến 18 tín chỉ không? Nếu chưa thể, hãy nêu rõ các môn hợp lệ, tín chỉ hiện có và dữ liệu còn thiếu. Không bịa thêm môn.', 'react')">
+                    <div class="starter-icon text-purple"><i class="fa-solid fa-calendar-days"></i></div>
+                    <div class="starter-info">
+                        <strong>Kiểm tra tính khả thi kế hoạch</strong>
+                        <span>Demo safe fallback khi catalog chưa đủ tải</span>
                     </div>
                 </div>
 
@@ -387,13 +447,6 @@ function clearChat() {
                     </div>
                 </div>
 
-                <div class="starter-card" onclick="selectStarterPrompt('Một tín chỉ trong hệ đào tạo đại học thường tương đương khoảng bao nhiêu giờ học và tự học?', 'baseline')">
-                    <div class="starter-icon" style="color: #38ef7d;"><i class="fa-solid fa-book"></i></div>
-                    <div class="starter-info">
-                        <strong>Định nghĩa 1 Tín chỉ là gì?</strong>
-                        <span>Hỏi đáp quy chế lý thuyết trên Baseline Chatbot</span>
-                    </div>
-                </div>
             </div>
         </div>
     `;

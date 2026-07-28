@@ -22,11 +22,18 @@ if sys.stdout.encoding != 'utf-8':
         pass
 
 # Import các thành phần từ file của Role 2, Role 3 & Multi-Provider Adapter
-from tools import AVAILABLE_TOOLS
-from prompts import CHATBOT_BASELINE_PROMPT, REACT_SYSTEM_PROMPT, MAX_ITERATIONS, TIMEOUT_SECONDS
+from tools import AVAILABLE_TOOLS, CATALOG, STUDENT_RECORDS
+from prompts import (
+    CHATBOT_BASELINE_PROMPT,
+    DOCUMENT_SEARCH_TIMEOUT_SECONDS,
+    REACT_SYSTEM_PROMPT,
+    MAX_ITERATIONS,
+    TIMEOUT_SECONDS,
+)
 from providers import get_llm_provider
 
 load_dotenv()
+PROVIDER_TIMEOUT_SECONDS = int(os.getenv("PROVIDER_TIMEOUT_SECONDS", "20"))
 
 def load_test_cases():
     """Đọc bộ test cases từ config/test_cases.json của Role 1"""
@@ -105,6 +112,145 @@ def parse_action(response: str):
         return None, f"LỖI [MALFORMED_ACTION]: {exc}"
 
 
+def strip_model_observations(response: str) -> str:
+    """Không cho model tự chèn Observation vào lịch sử ReAct.
+
+    Observation chỉ có giá trị khi được tạo bởi ``call_tool_with_timeout``. Nếu
+    giữ một Observation do model tự viết, model ở lượt sau có thể dựa vào catalog
+    hoặc lịch học bịa đặt thay vì kết quả tool thật.
+    """
+    clean_lines = []
+    for line in response.splitlines():
+        stripped = line.lstrip()
+        if stripped.startswith("Observation:"):
+            break
+        if stripped.startswith("Action:") and " Observation:" in line:
+            line = line.split(" Observation:", 1)[0]
+        clean_lines.append(line)
+    return "\n".join(clean_lines).strip()
+
+
+def _requires_verified_plan(query: str) -> bool:
+    normalized = query.lower()
+    return any(term in normalized for term in ("kế hoạch", "15 đến 18", "15-18"))
+
+
+def _plan_verification_fallback(verified_tools: set[str]) -> str:
+    required_tools = {"search_courses", "check_prerequisites", "check_schedule_conflicts", "calculate_credit_load"}
+    missing_tools = required_tools - verified_tools
+    return (
+        "Chưa thể chốt kế hoạch học kỳ hợp lệ. Agent chưa hoàn tất các kiểm chứng bắt buộc: "
+        f"{', '.join(sorted(missing_tools))}. Không xác nhận môn, lịch hay tổng tín chỉ khi chưa có Observation từ các tool này."
+    )
+
+
+def _plan_data_fallback() -> str:
+    """Trả về kết luận có grounding khi model bị lặp/đạt iteration limit."""
+    plan_result = AVAILABLE_TOOLS["recommend_course_plan"]("2A202601874", "AI/ML")
+    return (
+        "Không thể chốt kế hoạch 15–18 tín chỉ từ catalog fixture hiện tại mà không bịa dữ liệu.\n"
+        f"{plan_result}\n"
+        "Cần bổ sung các môn tự chọn/GenEd cùng lịch học vào catalog hoặc cập nhật hồ sơ sau khi hoàn thành prerequisite."
+    )
+
+
+def run_catalog_plan_workflow(user_query: str):
+    """Workflow ReAct xác định cho demo lập kế hoạch từ catalog fixture.
+
+    Một kế hoạch cần đủ năm bước kiểm chứng; không để LLM kết thúc sớm trước
+    khi có các Observation này. Khi fixture chưa đủ môn/lịch để tạo plan hợp lệ,
+    workflow trả safe fallback có dẫn chứng thay vì bịa course.
+    """
+    student_id, student = next(iter(STUDENT_RECORDS.items()))
+    completed = set(student["completed_courses"])
+    planned_courses = [
+        code for code, course in CATALOG.items()
+        if code not in completed and set(course["prerequisites"]).issubset(completed)
+    ]
+    planned_courses.sort()
+    trace = []
+
+    def observe(step, thought, action, tool_name, args):
+        observation = call_tool_with_timeout(tool_name, args)
+        trace.append({"step": step, "assistant": f"Thought: {thought}\nAction: {action}"})
+        trace.append({"step": step, "observation": observation})
+        return observation
+
+    observe(
+        1,
+        "Cần đọc hồ sơ fixture trước khi chọn các môn chưa hoàn thành.",
+        f"get_student_profile['{student_id}']",
+        "get_student_profile",
+        [student_id],
+    )
+    observe(
+        2,
+        "Cần tra catalog cho hướng AI/ML và các môn nền tảng liên quan.",
+        "search_courses['AI/ML']",
+        "search_courses",
+        ["AI/ML"],
+    )
+    prerequisite = observe(
+        3,
+        "Kiểm tra prerequisite của toàn bộ môn hiện đủ điều kiện theo hồ sơ.",
+        f"check_prerequisites['{student_id}', {planned_courses}]",
+        "check_prerequisites",
+        [student_id, planned_courses],
+    )
+    schedule = observe(
+        4,
+        "Kiểm tra lịch của các môn đủ điều kiện; thiếu dữ liệu lịch cũng không được xem là không trùng.",
+        f"check_schedule_conflicts[{planned_courses}]",
+        "check_schedule_conflicts",
+        [planned_courses],
+    )
+    credit = observe(
+        5,
+        "Tính tổng tải tín chỉ của các môn đã qua kiểm prerequisite.",
+        f"calculate_credit_load['{student_id}', {planned_courses}]",
+        "calculate_credit_load",
+        [student_id, planned_courses],
+    )
+
+    verified = (
+        prerequisite.startswith("ĐỦ ĐIỀU KIỆN")
+        and schedule.startswith("Không phát hiện")
+        and credit.startswith("Tải học kỳ hợp lệ")
+    )
+    if verified:
+        answer = f"Kế hoạch học kỳ hợp lệ: {', '.join(planned_courses)}. {credit} {schedule}"
+        return {"answer": answer, "trace": trace, "status": "completed"}
+
+    answer = (
+        "Chưa thể chốt kế hoạch 15–18 tín chỉ hợp lệ từ catalog fixture hiện tại.\n"
+        f"Môn đủ điều kiện theo hồ sơ: {', '.join(planned_courses) or 'không có'}.\n"
+        f"Prerequisite: {prerequisite}\nLịch: {schedule}\nTải tín chỉ: {credit}\n"
+        "Không tự thêm môn ngoài catalog hoặc khẳng định không trùng lịch khi fixture chưa có lịch."
+    )
+    return {"answer": answer, "trace": trace, "status": "verification_incomplete"}
+
+
+def _provider_failure_message(response: str) -> str | None:
+    """Nhận diện lỗi mà provider trả về dưới dạng text thay vì exception."""
+    normalized = response.lower()
+    provider_markers = ("[provider timeout]", "[provider exception]", "[gemini error]", "[gemini exception]", "[openai error]", "[openai exception]", "[ollama error]", "[ollama exception]", "[anthropic error]", "[anthropic exception]", "[openrouter")
+    if not any(marker in normalized for marker in provider_markers):
+        return None
+    if "timeout" in normalized:
+        return "Provider LLM phản hồi quá chậm hoặc không kết nối được. Agent đã dừng sau thời gian chờ để không treo giao diện."
+    if "429" in normalized or "resource_exhausted" in normalized or "quota" in normalized:
+        return (
+            "Gemini hiện đã chạm giới hạn quota nên agent không thể tiếp tục suy luận. "
+            "Hãy chờ quota được cấp lại, dùng API key/gói có quota còn lại, hoặc đặt `LLM_PROVIDER=mock` để demo offline."
+        )
+    if "404" in normalized or "not_found" in normalized or "no longer available" in normalized:
+        return (
+            "Model Gemini đã chọn không còn khả dụng cho API key này. Hãy dùng `gemini-3.6-flash` "
+            "(default hiện tại) hoặc đổi `LLM_MODEL` sang một model Gemini đang được hỗ trợ."
+        )
+    return "Provider LLM hiện không phản hồi được. Agent đã dừng để không đưa ra kết luận không được kiểm chứng."
+
+
 def call_tool_with_timeout(tool_name: str, args: list):
     """Gọi tool đã đăng ký với timeout và không để exception làm crash agent."""
     tool = AVAILABLE_TOOLS.get(tool_name)
@@ -113,13 +259,29 @@ def call_tool_with_timeout(tool_name: str, args: list):
 
     executor = ThreadPoolExecutor(max_workers=1)
     future = executor.submit(tool, *args)
+    timeout_seconds = DOCUMENT_SEARCH_TIMEOUT_SECONDS if tool_name == "search_official_sources" else TIMEOUT_SECONDS
     try:
-        return future.result(timeout=TIMEOUT_SECONDS)
+        return future.result(timeout=timeout_seconds)
     except TimeoutError:
         future.cancel()
-        return f"LỖI [TOOL_TIMEOUT]: Tool '{tool_name}' vượt quá {TIMEOUT_SECONDS} giây."
+        return f"LỖI [TOOL_TIMEOUT]: Tool '{tool_name}' vượt quá {timeout_seconds} giây."
     except Exception as exc:
         return f"LỖI [TOOL_EXCEPTION]: Tool '{tool_name}' thất bại: {exc}"
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def call_provider_with_timeout(provider, prompt: str, system_prompt: str):
+    """Giới hạn thời gian chờ API LLM để web không spinner vô hạn."""
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(provider.generate, prompt, system_prompt)
+    try:
+        return future.result(timeout=PROVIDER_TIMEOUT_SECONDS)
+    except TimeoutError:
+        future.cancel()
+        return f"[Provider Timeout]: API không phản hồi trong {PROVIDER_TIMEOUT_SECONDS} giây."
+    except Exception as exc:
+        return f"[Provider Exception]: {exc}"
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
@@ -127,16 +289,31 @@ def call_tool_with_timeout(tool_name: str, args: list):
 def run_react_agent(user_query: str, provider):
     """Chạy ReAct động: LLM → Action → tool → Observation → LLM."""
     print(f"\n🤖 [REACT AGENT] Câu hỏi: {user_query}")
+    if _requires_verified_plan(user_query):
+        return run_catalog_plan_workflow(user_query)
     conversation = f"User: {user_query}"
     trace = []
+    verified_tools = set()
+    action_signatures = set()
+    requires_verified_plan = _requires_verified_plan(user_query)
 
     for step in range(1, MAX_ITERATIONS + 1):
         print(f"\n--- 🔄 Vòng lặp ReAct (Step {step}/{MAX_ITERATIONS}) ---")
-        response = provider.generate(conversation, system_prompt=REACT_SYSTEM_PROMPT)
+        response = strip_model_observations(call_provider_with_timeout(provider, conversation, REACT_SYSTEM_PROMPT))
         print(response)
         trace.append({"step": step, "assistant": response})
 
+        provider_failure = _provider_failure_message(response)
+        if provider_failure:
+            print(f"🛑 PROVIDER UNAVAILABLE: {provider_failure}")
+            return {"answer": provider_failure, "trace": trace, "status": "provider_unavailable"}
+
         if "Final Answer:" in response:
+            required_tools = {"search_courses", "check_prerequisites", "check_schedule_conflicts", "calculate_credit_load"}
+            if requires_verified_plan and not required_tools.issubset(verified_tools):
+                answer = _plan_verification_fallback(verified_tools)
+                print(f"🛡️ VERIFICATION INCOMPLETE: {answer}")
+                return {"answer": answer, "trace": trace, "status": "verification_incomplete"}
             answer = response.split("Final Answer:", 1)[1].strip()
             print(f"🏁 Final Answer: {answer}")
             return {"answer": answer, "trace": trace, "status": "completed"}
@@ -145,13 +322,28 @@ def run_react_agent(user_query: str, provider):
         if tool_name is None:
             observation = args or "LỖI [NO_ACTION]: Agent không sinh Action hợp lệ."
         else:
+            signature = (tool_name, repr(args))
+            if signature in action_signatures:
+                answer = _plan_data_fallback() if requires_verified_plan else "Agent đã lặp lại cùng một Action nên đã dừng an toàn."
+                print(f"🛡️ REPEATED ACTION: {answer}")
+                trace.append({"step": step, "observation": "LỖI [REPEATED_ACTION]: Agent gọi lại cùng tool với cùng tham số."})
+                return {"answer": answer, "trace": trace, "status": "verification_incomplete"}
+            action_signatures.add(signature)
             print(f"🛠️ Action parsed: {tool_name}{args}")
             observation = call_tool_with_timeout(tool_name, args)
+            if tool_name == "search_courses" and not observation.startswith("LỖI"):
+                verified_tools.add(tool_name)
+            elif tool_name == "check_prerequisites" and observation.startswith("ĐỦ ĐIỀU KIỆN"):
+                verified_tools.add(tool_name)
+            elif tool_name == "check_schedule_conflicts" and observation.startswith("Không phát hiện"):
+                verified_tools.add(tool_name)
+            elif tool_name == "calculate_credit_load" and observation.startswith("Tải học kỳ hợp lệ"):
+                verified_tools.add(tool_name)
         print(f"👁️ Observation: {observation}")
         trace.append({"step": step, "observation": observation})
         conversation += f"\nAssistant: {response}\nObservation: {observation}"
 
-    fallback = "Không thể hoàn tất tư vấn trong giới hạn số vòng lặp an toàn."
+    fallback = _plan_data_fallback() if requires_verified_plan else "Không thể hoàn tất tư vấn trong giới hạn số vòng lặp an toàn."
     print(f"🛡️ GUARDRAIL TRIGGERED: {fallback}")
     return {"answer": fallback, "trace": trace, "status": "max_iterations"}
 

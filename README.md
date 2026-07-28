@@ -38,7 +38,29 @@ pip install -r requirements.txt
 LLM_PROVIDER=mock python src/app.py
 ```
 
-Để dùng LLM thật, cấu hình `LLM_PROVIDER` và API key trong `.env`.
+Để dùng LLM thật, cấu hình `LLM_PROVIDER` và API key trong `.env`. Gemini mặc định
+dùng `gemini-3.6-flash`; có thể override bằng `LLM_MODEL`. Các cấu hình cũ dùng
+`gemini-2.5-flash` được tự chuyển sang default mới.
+
+Để dùng Ollama Cloud, không dùng `OPENAI_API_KEY`. Cấu hình riêng:
+
+```env
+LLM_PROVIDER=ollama
+OLLAMA_API_KEY=your_ollama_api_key
+OLLAMA_BASE_URL=https://ollama.com/api
+LLM_MODEL=gemma4:31b-cloud
+```
+
+Với Ollama local, đổi `OLLAMA_BASE_URL` thành `http://localhost:11434/api`.
+
+### Semantic retrieval cho tài liệu PDF
+
+Khi có `GEMINI_API_KEY`, tool `search_official_sources()` tự chia PDF theo trang,
+tạo Gemini embeddings bằng `gemini-embedding-001` và lưu vector/chunk/metadata vào
+ChromaDB persistent tại `.chroma/`. Nếu PDF thay đổi, ChromaDB tự được index lại.
+Nếu thiếu key, Gemini hoặc ChromaDB không khả dụng, tool tự chuyển sang keyword search
+để app vẫn chạy offline. Có thể đổi model/dimension qua `GEMINI_EMBEDDING_MODEL` và
+`GEMINI_EMBEDDING_DIMENSIONS` (mặc định 768).
 
 ## Chạy giao diện web
 

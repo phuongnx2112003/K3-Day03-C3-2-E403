@@ -4,6 +4,10 @@ Dữ liệu catalog/schedule trong file này là fixture cục bộ để chạy
 Khi triển khai thật, các nguồn cần đồng bộ với Academic Catalog/SIS của VinUni.
 """
 
+import hashlib
+import json
+import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -21,16 +25,26 @@ ONLINE_SOURCES = {
     "registrar": "https://registrar.vinuni.edu.vn/academics/policy-regulations/",
     "student_gateway": "https://vinuni.edu.vn/student-gateway/",
 }
+EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+EMBEDDING_DIMENSIONS = int(os.getenv("GEMINI_EMBEDDING_DIMENSIONS", "768"))
+CHROMA_DB_PATH = PROJECT_ROOT / ".chroma"
+CHROMA_COLLECTION_NAME = "vinuni_official_documents"
+EMBEDDING_CHUNK_WORDS = 180
+EMBEDDING_CHUNK_OVERLAP = 40
+
+
+class EmbeddingUnavailable(RuntimeError):
+    """Gemini embedding chưa được cấu hình hoặc không thể gọi trong lúc này."""
 
 CATALOG = {
-    "COMP1010": {"name": "Introduction to Programming", "credits": 4, "prerequisites": []},
-    "MATH1010": {"name": "Calculus I", "credits": 4, "prerequisites": []},
-    "STAT1010": {"name": "Probability and Statistics", "credits": 3, "prerequisites": []},
-    "MATH2010": {"name": "Linear Algebra", "credits": 3, "prerequisites": []},
-    "COMP1020": {"name": "Object-oriented Programming and Data Structures", "credits": 4, "prerequisites": ["COMP1010"]},
-    "COMP2030": {"name": "Software Construction", "credits": 4, "prerequisites": ["COMP1020"]},
-    "COMP2050": {"name": "Artificial Intelligence", "credits": 4, "prerequisites": ["COMP1010", "STAT1010"]},
-    "COMP3010": {"name": "Algorithm Design", "credits": 4, "prerequisites": ["COMP1020"]},
+    "COMP1010": {"name": "Introduction to Programming", "credits": 4, "prerequisites": [], "area": "Core CS"},
+    "MATH1010": {"name": "Calculus I", "credits": 4, "prerequisites": [], "area": "Mathematics"},
+    "STAT1010": {"name": "Probability and Statistics", "credits": 3, "prerequisites": [], "area": "Mathematics, AI/ML"},
+    "MATH2010": {"name": "Linear Algebra", "credits": 3, "prerequisites": [], "area": "Mathematics, AI/ML"},
+    "COMP1020": {"name": "Object-oriented Programming and Data Structures", "credits": 4, "prerequisites": ["COMP1010"], "area": "Core CS, AI/ML foundation"},
+    "COMP2030": {"name": "Software Construction", "credits": 4, "prerequisites": ["COMP1020"], "area": "Core CS"},
+    "COMP2050": {"name": "Artificial Intelligence", "credits": 4, "prerequisites": ["COMP1010", "STAT1010"], "area": "AI/ML"},
+    "COMP3010": {"name": "Algorithm Design", "credits": 4, "prerequisites": ["COMP1020"], "area": "Core CS"},
     "COMP3020": {
         "name": "Machine Learning",
         "credits": 4,
@@ -70,13 +84,131 @@ def _read_source_pages(source_name: str):
     return [page.extract_text() or "" for page in reader.pages]
 
 
-def search_official_sources(query: str, max_results: int = 3) -> str:
-    """Tìm đoạn trích liên quan trong PDF Academic Regulations/CS Curriculum.
+def _source_fingerprints():
+    """Fingerprint PDF để tự tạo lại index khi tài liệu nguồn thay đổi."""
+    fingerprints = {}
+    for source_name, path in SOURCE_FILES.items():
+        if not path.exists():
+            raise FileNotFoundError(f"Không tìm thấy tài liệu nguồn: {source_name}")
+        fingerprints[source_name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return fingerprints
 
-    Kết quả luôn kèm nguồn và số trang để Agent có thể viện dẫn. Student Gateway
-    và Registrar được trả dưới dạng liên kết chính thức vì cần truy cập online/SIS.
-    """
-    query_text = " ".join(str(query).lower().split())
+
+def _chunk_source_pages():
+    """Chia PDF thành các đoạn ngắn có overlap, vẫn giữ nguồn và số trang."""
+    chunks = []
+    for source_name in SOURCE_FILES:
+        for page_number, page_text in enumerate(_read_source_pages(source_name), start=1):
+            words = page_text.split()
+            for start in range(0, len(words), EMBEDDING_CHUNK_WORDS - EMBEDDING_CHUNK_OVERLAP):
+                text = " ".join(words[start:start + EMBEDDING_CHUNK_WORDS])
+                if text:
+                    chunks.append({"source": source_name, "page": page_number, "text": text})
+    return chunks
+
+
+def _gemini_embed(texts, task_type):
+    """Gọi Gemini Embedding API; không có key thì caller dùng lexical fallback."""
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise EmbeddingUnavailable("Chưa cấu hình GEMINI_API_KEY")
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+        response = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=texts,
+            config=types.EmbedContentConfig(
+                task_type=task_type,
+                output_dimensionality=EMBEDDING_DIMENSIONS,
+            ),
+        )
+        vectors = [embedding.values for embedding in response.embeddings]
+        if len(vectors) != len(texts):
+            raise EmbeddingUnavailable("Gemini trả về số vector không khớp dữ liệu đầu vào")
+        return vectors
+    except EmbeddingUnavailable:
+        raise
+    except Exception as exc:
+        raise EmbeddingUnavailable(f"Không thể tạo Gemini embedding: {exc}") from exc
+
+
+def _load_or_build_chroma_collection():
+    """Mở ChromaDB persistent và index lại khi PDF nguồn thay đổi."""
+    fingerprints = _source_fingerprints()
+    try:
+        import chromadb
+    except ImportError as exc:
+        raise EmbeddingUnavailable("Thiếu chromadb. Hãy chạy: pip install -r requirements.txt") from exc
+
+    corpus_hash = hashlib.sha256(json.dumps(fingerprints, sort_keys=True).encode()).hexdigest()
+    try:
+        client = chromadb.PersistentClient(path=str(CHROMA_DB_PATH))
+        collection = client.get_or_create_collection(
+            name=CHROMA_COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"},
+        )
+        existing = collection.get(include=["metadatas"])
+    except Exception as exc:
+        raise EmbeddingUnavailable(f"Không thể mở ChromaDB: {exc}") from exc
+
+    chunks = _chunk_source_pages()
+    if not chunks:
+        raise EmbeddingUnavailable("Không trích xuất được nội dung từ PDF nguồn")
+
+    existing_metadata = existing.get("metadatas") or []
+    index_current = (
+        len(existing.get("ids") or []) == len(chunks)
+        and all(metadata and metadata.get("corpus_hash") == corpus_hash for metadata in existing_metadata)
+    )
+    if index_current:
+        return collection
+
+    if existing.get("ids"):
+        collection.delete(ids=existing["ids"])
+    for start in range(0, len(chunks), 32):
+        batch = chunks[start:start + 32]
+        vectors = _gemini_embed([chunk["text"] for chunk in batch], "RETRIEVAL_DOCUMENT")
+        collection.upsert(
+            ids=[f"{chunk['source']}-p{chunk['page']}-{start + index}" for index, chunk in enumerate(batch)],
+            documents=[chunk["text"] for chunk in batch],
+            embeddings=vectors,
+            metadatas=[
+                {
+                    "source": chunk["source"],
+                    "page": chunk["page"],
+                    "corpus_hash": corpus_hash,
+                    "embedding_model": EMBEDDING_MODEL,
+                }
+                for chunk in batch
+            ],
+        )
+    return collection
+
+
+def _semantic_search(query, max_results):
+    """Semantic retrieval: Gemini tạo query vector, ChromaDB tìm nearest chunks."""
+    collection = _load_or_build_chroma_collection()
+    query_vector = _gemini_embed([query], "RETRIEVAL_QUERY")[0]
+    results = collection.query(
+        query_embeddings=[query_vector],
+        n_results=max_results,
+        include=["documents", "metadatas", "distances"],
+    )
+    documents = (results.get("documents") or [[]])[0]
+    metadatas = (results.get("metadatas") or [[]])[0]
+    distances = (results.get("distances") or [[]])[0]
+    return [
+        (distance, {"source": metadata["source"], "page": metadata["page"], "text": document})
+        for distance, document, metadata in zip(distances, documents, metadatas)
+        if document is not None and metadata is not None
+    ]
+
+
+def _lexical_search(query_text, max_results):
+    """Fallback offline khi Gemini embedding chưa sẵn sàng."""
     terms = [term for term in query_text.split() if len(term) > 2]
     # PDF nguồn là tiếng Anh; map các cách hỏi phổ biến bằng tiếng Việt sang
     # thuật ngữ xuất hiện trong Academic Regulations để tránh kết quả nhiễu.
@@ -87,14 +219,11 @@ def search_official_sources(query: str, max_results: int = 3) -> str:
     if len(terms) > 1:
         phrases.extend(" ".join(terms[index:index + 2]) for index in range(len(terms) - 1))
     if not terms:
-        return "LỖI [EMPTY_QUERY]: Cần cung cấp từ khóa tra cứu tài liệu."
+        return []
 
     results = []
     for source_name in SOURCE_FILES:
-        try:
-            pages = _read_source_pages(source_name)
-        except (FileNotFoundError, RuntimeError) as exc:
-            return f"LỖI [SOURCE_UNAVAILABLE]: {exc}"
+        pages = _read_source_pages(source_name)
         for page_number, text in enumerate(pages, start=1):
             lowered = text.lower()
             score = sum(lowered.count(term) for term in terms)
@@ -106,17 +235,35 @@ def search_official_sources(query: str, max_results: int = 3) -> str:
                 default=0,
             )
             start = max(0, first_term_position - 180)
-            snippet = " ".join(text[start:start + 520].split())
-            results.append((score, source_name, page_number, snippet))
+            results.append((score, {"source": source_name, "page": page_number, "text": " ".join(text[start:start + 520].split())}))
+    return sorted(results, key=lambda item: item[0], reverse=True)[:max_results]
 
-    results.sort(key=lambda item: item[0], reverse=True)
+
+def search_official_sources(query: str, max_results: int = 3) -> str:
+    """Tìm đoạn trích liên quan trong PDF Academic Regulations/CS Curriculum.
+
+    Kết quả luôn kèm nguồn và số trang để Agent có thể viện dẫn. Student Gateway
+    và Registrar được trả dưới dạng liên kết chính thức vì cần truy cập online/SIS.
+    """
+    query_text = " ".join(str(query).lower().split())
+    if not query_text:
+        return "LỖI [EMPTY_QUERY]: Cần cung cấp từ khóa tra cứu tài liệu."
+    try:
+        results = _semantic_search(query_text, max_results)
+        retrieval_method = "GEMINI EMBEDDING"
+    except (EmbeddingUnavailable, FileNotFoundError, RuntimeError):
+        try:
+            results = _lexical_search(query_text, max_results)
+            retrieval_method = "KEYWORD FALLBACK"
+        except (FileNotFoundError, RuntimeError) as exc:
+            return f"LỖI [SOURCE_UNAVAILABLE]: {exc}"
     if not results:
         online = "\n".join(f"- {name}: {url}" for name, url in ONLINE_SOURCES.items())
         return f"Không tìm thấy đoạn trích phù hợp trong PDF. Nguồn online cần kiểm tra:\n{online}"
 
-    lines = ["KẾT QUẢ TRA CỨU TÀI LIỆU CHÍNH THỨC:"]
-    for _, source_name, page_number, snippet in results[:max_results]:
-        lines.append(f"[{source_name}, trang {page_number}] {snippet}")
+    lines = [f"KẾT QUẢ TRA CỨU TÀI LIỆU CHÍNH THỨC ({retrieval_method}):"]
+    for _, chunk in results:
+        lines.append(f"[{chunk['source']}, trang {chunk['page']}] {chunk['text']}")
     return "\n".join(lines)
 
 
@@ -137,12 +284,17 @@ def get_student_profile(student_id: str) -> str:
 
 
 def search_courses(keywords: str) -> str:
-    """Tra cứu môn học theo mã môn hoặc tên môn trong catalog fixture."""
+    """Tra cứu môn theo mã/tên; chấp nhận nhiều từ khóa ngăn cách bởi dấu phẩy."""
     query = str(keywords).lower().strip()
+    terms = [term.strip() for term in re.split(r"[,;/]+", query) if term.strip()]
+    if query in {"ai/ml", "ai", "ml"}:
+        terms.extend(["artificial intelligence", "machine learning", "ai/ml"])
+    if not terms:
+        return "LỖI [EMPTY_QUERY]: Cần cung cấp từ khóa hoặc mã môn."
     matches = [
         f"{code}: {course['name']} ({course['credits']} tín chỉ; prerequisite: {', '.join(course['prerequisites']) or 'Không có'})"
         for code, course in CATALOG.items()
-        if query in code.lower() or query in course["name"].lower()
+        if any(term in code.lower() or term in course["name"].lower() or term in course.get("area", "").lower() for term in terms)
     ]
     if not matches:
         return f"LỖI [COURSE_NOT_FOUND]: Không tìm thấy môn phù hợp với '{keywords}'."
@@ -183,6 +335,10 @@ def check_schedule_conflicts(course_codes: list[str]) -> str:
     if unknown:
         return f"LỖI [COURSE_NOT_FOUND]: Không tồn tại môn {', '.join(unknown)}."
 
+    unavailable = [code for code in codes if code not in COURSE_SCHEDULES]
+    if unavailable:
+        return f"CẢNH BÁO [SCHEDULE_UNAVAILABLE]: Chưa có lịch fixture cho {', '.join(unavailable)}; không thể xác nhận kế hoạch không trùng lịch."
+
     seen = {}
     conflicts = []
     for code in codes:
@@ -216,7 +372,7 @@ def recommend_course_plan(student_id: str, goal: str) -> str:
     """Đề xuất kế hoạch an toàn và báo rõ các điều kiện chưa đáp ứng."""
     if str(student_id).strip() not in STUDENT_RECORDS:
         return f"LỖI [INVALID_ID]: Không tìm thấy sinh viên với mã '{student_id}'."
-    candidates = ["COMP1020", "COMP2030", "COMP2050", "COMP3010", "COMP3030"]
+    candidates = ["COMP1020", "MATH2010", "STAT1010", "COMP2030", "COMP2050", "COMP3010", "COMP3030"]
     if "AI" not in str(goal).upper() and "ML" not in str(goal).upper():
         candidates = ["COMP1020", "COMP2030", "COMP3030"]
     eligible = []
@@ -230,6 +386,13 @@ def recommend_course_plan(student_id: str, goal: str) -> str:
             eligible.append(code)
     if not eligible:
         return "KHÔNG CÓ KẾ HOẠCH HỢP LỆ: " + "; ".join(blocked)
+    total = sum(CATALOG[code]["credits"] for code in eligible)
+    if total < 12:
+        return (
+            f"CHƯA CÓ KẾ HOẠCH FULL-TIME HỢP LỆ: các môn đủ điều kiện hiện có là {', '.join(eligible)} "
+            f"({total} tín chỉ), thấp hơn mức 12 tín chỉ. Không tự bịa thêm môn ngoài catalog.\n"
+            + (f"Môn chưa thể đưa vào kế hoạch: {'; '.join(blocked)}" if blocked else "")
+        )
     return (
         f"Kế hoạch sơ bộ: {', '.join(eligible)}\n"
         f"{check_schedule_conflicts(eligible)}\n"

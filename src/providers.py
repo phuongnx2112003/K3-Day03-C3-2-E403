@@ -9,6 +9,12 @@ import json
 import requests
 from dotenv import load_dotenv
 
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
+RETIRED_GEMINI_MODELS = {
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-preview-09-25",
+}
+
 # Đảm bảo in ra Tiếng Việt và Emojis không bị lỗi trên Windows Console
 if sys.stdout.encoding != 'utf-8':
     try:
@@ -28,7 +34,10 @@ class GeminiProvider(BaseLLMProvider):
     """Google Gemini Provider"""
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
-        self.model_name = model or os.getenv("LLM_MODEL") or "gemini-2.5-flash"
+        requested_model = model or os.getenv("LLM_MODEL") or DEFAULT_GEMINI_MODEL
+        # Các key/API project mới có thể nhận 404 với Gemini 2.5 Flash. Tự
+        # migrate giá trị legacy, nhưng vẫn tôn trọng một model mới do user chọn.
+        self.model_name = DEFAULT_GEMINI_MODEL if requested_model in RETIRED_GEMINI_MODELS else requested_model
         
     def generate(self, prompt: str, system_prompt: str = "") -> str:
         if not self.api_key or self.api_key == "your_gemini_api_key_here":
@@ -57,7 +66,10 @@ class OpenAIProvider(BaseLLMProvider):
             return "[OpenAI Error]: Chưa cấu hình OPENAI_API_KEY trong file .env!"
         try:
             import openai
-            client = openai.OpenAI(api_key=self.api_key)
+            client_kwargs = {"api_key": self.api_key}
+            if os.getenv("OPENAI_BASE_URL"):
+                client_kwargs["base_url"] = os.getenv("OPENAI_BASE_URL")
+            client = openai.OpenAI(**client_kwargs)
             messages = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
@@ -70,6 +82,33 @@ class OpenAIProvider(BaseLLMProvider):
             return response.choices[0].message.content
         except Exception as e:
             return f"[OpenAI Exception]: {str(e)}"
+
+
+class OllamaProvider(BaseLLMProvider):
+    """Ollama local hoặc Ollama Cloud qua API chính thức /api/chat."""
+    def __init__(self, api_key: str = None, model: str = None, base_url: str = None):
+        self.api_key = api_key or os.getenv("OLLAMA_API_KEY")
+        self.model_name = model or os.getenv("LLM_MODEL") or "gemma4:31b-cloud"
+        self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL") or "https://ollama.com/api").rstrip("/")
+
+    def generate(self, prompt: str, system_prompt: str = "") -> str:
+        if not self.api_key:
+            return "[Ollama Error]: Chưa cấu hình OLLAMA_API_KEY trong file .env!"
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={"model": self.model_name, "messages": messages, "stream": False},
+                timeout=20,
+            )
+            response.raise_for_status()
+            return response.json()["message"]["content"]
+        except Exception as exc:
+            return f"[Ollama Exception]: {exc}"
 
 
 class AnthropicProvider(BaseLLMProvider):
@@ -142,17 +181,42 @@ class MockProvider(BaseLLMProvider):
                     f"Final Answer: {observation}"
                 )
             lowered = prompt.lower()
-            if "tín chỉ" in lowered or "credit" in lowered or "study load" in lowered:
+            if "hãy đăng ký ngay" in lowered or ("comp3020" in lowered and "comp4890" in lowered):
+                return (
+                    "Thought: Cần kiểm tra prerequisite của các môn được yêu cầu trước khi lập kế hoạch.\n"
+                    "Action: check_prerequisites['2A202601874', ['COMP3020', 'COMP2050', 'COMP4890']]"
+                )
+            if "trùng lịch" in lowered or "schedule" in lowered:
+                return (
+                    "Thought: Cần kiểm tra trực tiếp các mã môn được nêu trong lịch fixture.\n"
+                    "Action: check_schedule_conflicts[['COMP2050', 'COMP3020']]"
+                )
+            if "tính tải tín chỉ" in lowered or "comp1020, math2010 và stat1010" in lowered:
+                return (
+                    "Thought: Cần cộng tín chỉ của danh sách môn và đối chiếu ngưỡng full-time.\n"
+                    "Action: calculate_credit_load['2A202601874', ['COMP1020', 'MATH2010', 'STAT1010']]"
+                )
+            if "academic regulations" in lowered or "số trang" in lowered or "study load" in lowered:
                 return (
                     "Thought: Cần tra cứu quy định chính thức về credit và study load.\n"
                     "Action: search_official_sources['credit study load']"
+                )
+            if "catalog fixture" in lowered or "môn thuộc hướng ai/ml" in lowered:
+                return (
+                    "Thought: Cần tra catalog theo lĩnh vực AI/ML.\n"
+                    "Action: search_courses['AI/ML']"
                 )
             if "comp1020" in lowered:
                 return (
                     "Thought: Cần kiểm tra prerequisite của COMP1020 theo hồ sơ sinh viên.\n"
                     "Action: check_prerequisites['2A202601874', ['COMP1020']]"
                 )
-            if "comp3020" in lowered or "comp2050" in lowered or "comp4890" in lowered:
+            if "comp2050" in lowered and "comp3020" not in lowered and "comp4890" not in lowered:
+                return (
+                    "Thought: Cần kiểm tra prerequisite riêng của COMP2050 theo hồ sơ sinh viên.\n"
+                    "Action: check_prerequisites['2A202601874', ['COMP2050']]"
+                )
+            if "comp3020" in lowered or "comp4890" in lowered:
                 return (
                     "Thought: Cần kiểm tra prerequisite của các môn được yêu cầu trước khi lập kế hoạch.\n"
                     "Action: check_prerequisites['2A202601874', ['COMP3020', 'COMP2050', 'COMP4890']]"
@@ -177,6 +241,8 @@ def get_llm_provider(provider_name: str = None) -> BaseLLMProvider:
         return GeminiProvider()
     elif name == "openai":
         return OpenAIProvider()
+    elif name == "ollama":
+        return OllamaProvider()
     elif name == "anthropic":
         return AnthropicProvider()
     elif name == "openrouter":
