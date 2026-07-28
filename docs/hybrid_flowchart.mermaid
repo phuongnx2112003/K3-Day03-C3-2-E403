@@ -1,34 +1,47 @@
+
 graph TD
     A["Sinh viên nhập câu hỏi"] --> B{"Router / Intent Checker"}
-    
-    %% Nhánh Chatbot
-    B -- "Câu hỏi lý thuyết" --> C["LLM Baseline"]
-    C --> D["Trả lời trực tiếp bằng kiến thức nền"]
-    
-    %% Nhánh ReAct Agent
-    B -- "Yêu cầu lập kế hoạch" --> E["ReAct Agent Loop"]
-    E --> F{"Agent: Thought (Suy luận)"}
-    
-    F --> |"Cần gọi Tool"| G["Action: Chọn hàm trong AVAILABLE_TOOLS"]
-    
-    G --> |"get_student_profile"| T1["Lấy hồ sơ & môn đã học"]
-    G --> |"search_courses"| T2["Tìm môn trong Catalog"]
-    G --> |"check_prerequisites"| T3["Kiểm tra môn tiên quyết"]
-    G --> |"check_schedule_conflicts"| T4["Kiểm tra trùng lịch"]
-    G --> |"calculate_credit_load"| T5["Kiểm tra 12-18 tín chỉ"]
-    G --> |"recommend_course_plan"| T6["Gợi ý kế hoạch mẫu"]
-    
-    T1 --> O["Observation (Kết quả trả về)"]
-    T2 --> O
-    T3 --> O
-    T4 --> O
-    T5 --> O
-    T6 --> O
-    
-    O --> |"Có LỖI / Cần thêm thông tin"| F
-    O --> |"Dữ liệu hợp lệ"| F
-    
-    F --> |"Đã đủ dữ kiện & Qua Guardrails"| M["Final Answer: Tổng hợp kế hoạch"]
-    
-    D --> Z["Hiển thị cho Sinh viên"]
+
+    B -->|"Câu hỏi lý thuyết"| C["LLM Baseline"]
+    C --> D["Trả lời bằng kiến thức nền"]
+
+    B -->|"Yêu cầu lập kế hoạch"| E
+
+    subgraph SG1["ReAct Agent Loop"]
+        E{"Thought: Suy luận bước tiếp theo"}
+        G["Action: chọn tool phù hợp"]
+        E -->|"Cần gọi tool"| G
+
+        subgraph SG2["AVAILABLE_TOOLS"]
+            direction LR
+            T1["get_student_profile"]
+            T2["search_courses"]
+            T3["check_prerequisites"]
+            T4["check_schedule_conflicts"]
+            T5["calculate_credit_load"]
+            T6["recommend_course_plan"]
+        end
+
+        G --> T1 & T2 & T3 & T4 & T5 & T6
+        T1 & T2 & T3 & T4 & T5 & T6 --> O["Observation: kết quả trả về"]
+        O -->|"Lỗi / thiếu thông tin"| E
+        O -->|"Dữ liệu hợp lệ"| E
+
+        E -->|"Đủ dữ kiện & qua Guardrails"| M["Final Answer: tổng hợp kế hoạch"]
+    end
+
+    D --> Z["Hiển thị cho sinh viên"]
     M --> Z
+
+    classDef entry fill:#E6F1FB,stroke:#185FA5,color:#0C447C
+    classDef decision fill:#FAEEDA,stroke:#854F0B,color:#633806
+    classDef chat fill:#EEEDFE,stroke:#534AB7,color:#26215C
+    classDef tool fill:#E1F5EE,stroke:#0F6E56,color:#04342C
+    classDef result fill:#EAF3DE,stroke:#3B6D11,color:#173404
+    classDef output fill:#F1EFE8,stroke:#5F5E5A,color:#2C2C2A
+
+    class A,Z entry
+    class B,E decision
+    class C,D chat
+    class T1,T2,T3,T4,T5,T6,G tool
+    class O,M result
