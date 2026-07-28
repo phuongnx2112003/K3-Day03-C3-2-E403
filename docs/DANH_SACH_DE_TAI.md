@@ -1,7 +1,7 @@
 # 💡 DANH SÁCH ĐỀ TÀI GỢI Ý (SUGGESTED LAB TOPICS)
 
 1. Cupid Agent: Trợ Lý Ghép Đôi & Phân Tích Độ Tương Thích
-2. Chatbot Định Hướng Sự Nghiệp
+2. Chatbot Định Hướng Sự Nghiệp x1
 3. Trợ Lý Nắm Bắt Tính Cách & Chọn Quà Tặng Phù Hợp
 4. Trợ Lý Khai Quật Nhân Cách Thứ 2 & Tư Vấn Tâm Lý
 5. Trợ Lý Tra Cứu Đơn Hàng & Xử Lý Đổi Trả
