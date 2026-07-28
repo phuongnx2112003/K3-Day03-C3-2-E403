@@ -34,7 +34,8 @@ def load_test_cases():
     if not os.path.exists(config_path):
         config_path = "test_cases.json"
         
-    with open(config_path, "r", encoding="utf-8") as f:
+    # utf-8-sig vẫn đọc được UTF-8 thông thường và file có BOM từ Windows.
+    with open(config_path, "r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
