@@ -24,3 +24,7 @@ Hai trang HTML trên vẫn được giữ dưới dạng nguồn chính thức t
 - Computer Science có lựa chọn 120 credits cho single major hoặc 135 credits khi kết hợp major và minor.
 
 Khi dữ liệu trên trang chính thức thay đổi, cần tải lại các PDF và cập nhật ngày kiểm tra trước khi dùng làm căn cứ cho quyết định học vụ.
+
+## Cách Agent truy xuất tài liệu
+
+Tool `search_official_sources(query)` trong `src/tools.py` đọc và cache nội dung PDF, sau đó trả về đoạn trích cùng tên tài liệu và số trang. ReAct Agent gọi tool này khi cần xác minh credit, study load, prerequisite hoặc cấu trúc chương trình. Hai nguồn Registrar và Student Gateway vẫn cần truy cập online/SIS vì không có bản snapshot cục bộ.

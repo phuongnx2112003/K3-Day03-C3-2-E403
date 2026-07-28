@@ -5,7 +5,10 @@ File chính ghép nối tất cả các thành phần: Tools + Prompts + Test Ca
 
 import json
 import os
+import ast
+import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dotenv import load_dotenv
 
 # Đảm bảo import các module cùng thư mục src/ hoạt động mượt mà
@@ -20,7 +23,7 @@ if sys.stdout.encoding != 'utf-8':
 
 # Import các thành phần từ file của Role 2, Role 3 & Multi-Provider Adapter
 from tools import AVAILABLE_TOOLS
-from prompts import CHATBOT_BASELINE_PROMPT, REACT_SYSTEM_PROMPT, MAX_ITERATIONS
+from prompts import CHATBOT_BASELINE_PROMPT, REACT_SYSTEM_PROMPT, MAX_ITERATIONS, TIMEOUT_SECONDS
 from providers import get_llm_provider
 
 load_dotenv()
@@ -76,30 +79,71 @@ def run_baseline_evaluation(test_cases, provider):
     return results
 
 
-def run_react_agent(user_query: str, provider):
-    """
-    Dựng vòng lặp ReAct Agent (Thought -> Action -> Observation) có Guardrails.
-    """
-    print(f"\n🤖 [REACT AGENT] Câu hỏi: {user_query}")
-    step = 0
-    
-    while step < MAX_ITERATIONS:
-        step += 1
-        print(f"\n--- 🔄 Vòng lặp ReAct (Step {step}/{MAX_ITERATIONS}) ---")
-        
-        if step == 1:
-            print("🧠 Thought: Cần kiểm tra môn tiên quyết của CS201 cho sinh viên.")
-            print("🛠️ Action: check_prerequisites['2A202601874', ['CS201']]")
-            obs = AVAILABLE_TOOLS["check_prerequisites"]("2A202601874", ["CS201"])
-            print(f"👁️ Observation: {obs}")
+def parse_action(response: str):
+    """Parse Action: tool[args] bằng AST, không dùng eval không an toàn."""
+    match = re.search(r"Action:\s*([A-Za-z_]\w*)\s*(\[.*\])", response, re.DOTALL)
+    if not match:
+        return None, None
+    tool_name, args_text = match.group(1), match.group(2)[1:-1]
+    try:
+        call = ast.parse(f"f({args_text})", mode="eval").body
+        if not isinstance(call, ast.Call) or call.keywords:
+            raise ValueError("chỉ hỗ trợ positional arguments")
+        args = [ast.literal_eval(argument) for argument in call.args]
+        return tool_name, args
+    except (SyntaxError, ValueError, TypeError) as exc:
+        return None, f"LỖI [MALFORMED_ACTION]: {exc}"
 
-        elif step == 2:
-            print("🧠 Thought: Đã có kết quả kiểm tra điều kiện đăng ký.")
-            print(f"🏁 Final Answer: {obs}")
-            break
-            
-    if step >= MAX_ITERATIONS:
-        print(f"🛡️ GUARDRAIL TRIGGERED: Đã đạt giới hạn tối đa {MAX_ITERATIONS} bước. Ngắt lặp an toàn!")
+
+def call_tool_with_timeout(tool_name: str, args: list):
+    """Gọi tool đã đăng ký với timeout và không để exception làm crash agent."""
+    tool = AVAILABLE_TOOLS.get(tool_name)
+    if tool is None:
+        return f"LỖI [UNKNOWN_TOOL]: '{tool_name}' không nằm trong AVAILABLE_TOOLS."
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(tool, *args)
+    try:
+        return future.result(timeout=TIMEOUT_SECONDS)
+    except TimeoutError:
+        future.cancel()
+        return f"LỖI [TOOL_TIMEOUT]: Tool '{tool_name}' vượt quá {TIMEOUT_SECONDS} giây."
+    except Exception as exc:
+        return f"LỖI [TOOL_EXCEPTION]: Tool '{tool_name}' thất bại: {exc}"
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def run_react_agent(user_query: str, provider):
+    """Chạy ReAct động: LLM → Action → tool → Observation → LLM."""
+    print(f"\n🤖 [REACT AGENT] Câu hỏi: {user_query}")
+    conversation = f"User: {user_query}"
+    trace = []
+
+    for step in range(1, MAX_ITERATIONS + 1):
+        print(f"\n--- 🔄 Vòng lặp ReAct (Step {step}/{MAX_ITERATIONS}) ---")
+        response = provider.generate(conversation, system_prompt=REACT_SYSTEM_PROMPT)
+        print(response)
+        trace.append({"step": step, "assistant": response})
+
+        if "Final Answer:" in response:
+            answer = response.split("Final Answer:", 1)[1].strip()
+            print(f"🏁 Final Answer: {answer}")
+            return {"answer": answer, "trace": trace, "status": "completed"}
+
+        tool_name, args = parse_action(response)
+        if tool_name is None:
+            observation = args or "LỖI [NO_ACTION]: Agent không sinh Action hợp lệ."
+        else:
+            print(f"🛠️ Action parsed: {tool_name}{args}")
+            observation = call_tool_with_timeout(tool_name, args)
+        print(f"👁️ Observation: {observation}")
+        trace.append({"step": step, "observation": observation})
+        conversation += f"\nAssistant: {response}\nObservation: {observation}"
+
+    fallback = "Không thể hoàn tất tư vấn trong giới hạn số vòng lặp an toàn."
+    print(f"🛡️ GUARDRAIL TRIGGERED: {fallback}")
+    return {"answer": fallback, "trace": trace, "status": "max_iterations"}
 
 
 if __name__ == "__main__":
@@ -115,5 +159,10 @@ if __name__ == "__main__":
     tests = load_test_cases()
     print(f"✅ Đã tải thành công {len(tests)} Test Cases từ config/test_cases.json\n")
     
-    # Mốc 2: chỉ chạy baseline trên toàn bộ test case, chưa chạy ReAct.
+    # Mốc 2: chạy baseline trên toàn bộ test case.
     run_baseline_evaluation(tests, provider)
+
+    # Mốc 3: chạy ReAct trên các case cần tool/guardrail.
+    print("\n--- MỐC 3: CHẠY REACT AGENT ---")
+    for case in tests[2:]:
+        run_react_agent(case["question"], provider)

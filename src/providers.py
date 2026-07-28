@@ -134,6 +134,38 @@ class OpenRouterProvider(BaseLLMProvider):
 class MockProvider(BaseLLMProvider):
     """Offline Mock Provider (Cho bài test không cần kết nối API)"""
     def generate(self, prompt: str, system_prompt: str = "") -> str:
+        if "QUY TRÌNH SUY LUẬN BẮT BUỘC" in system_prompt:
+            if "Observation:" in prompt:
+                observation = prompt.rsplit("Observation:", 1)[-1].strip()
+                return (
+                    "Thought: Tôi đã nhận Observation và chỉ kết luận dựa trên dữ liệu của tool.\n"
+                    f"Final Answer: {observation}"
+                )
+            lowered = prompt.lower()
+            if "tín chỉ" in lowered or "credit" in lowered or "study load" in lowered:
+                return (
+                    "Thought: Cần tra cứu quy định chính thức về credit và study load.\n"
+                    "Action: search_official_sources['credit study load']"
+                )
+            if "comp1020" in lowered:
+                return (
+                    "Thought: Cần kiểm tra prerequisite của COMP1020 theo hồ sơ sinh viên.\n"
+                    "Action: check_prerequisites['2A202601874', ['COMP1020']]"
+                )
+            if "comp3020" in lowered or "comp2050" in lowered or "comp4890" in lowered:
+                return (
+                    "Thought: Cần kiểm tra prerequisite của các môn được yêu cầu trước khi lập kế hoạch.\n"
+                    "Action: check_prerequisites['2A202601874', ['COMP3020', 'COMP2050', 'COMP4890']]"
+                )
+            if "kế hoạch" in lowered or "15 đến 18" in lowered or "ai/ml" in lowered:
+                return (
+                    "Thought: Cần đề xuất kế hoạch dựa trên mục tiêu AI/ML và kiểm tra các điều kiện.\n"
+                    "Action: recommend_course_plan['2A202601874', 'AI/ML']"
+                )
+            return (
+                "Thought: Cần đọc hồ sơ học tập trước khi đưa ra tư vấn.\n"
+                "Action: get_student_profile['2A202601874']"
+            )
         return "🤖 [Mock Provider]: Phản hồi giả lập offline cho bài test học vụ."
 
 

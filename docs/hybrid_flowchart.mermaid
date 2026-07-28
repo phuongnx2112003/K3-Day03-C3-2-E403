@@ -1,0 +1,15 @@
+flowchart TD
+    A[User asks academic question] --> B{Need personal data or multi-step validation?}
+    B -- "No" --> C[Baseline Chatbot]
+    C --> D[Explain general credit and registration rules]
+    B -- "Yes" --> E[ReAct Agent]
+    E --> F[Thought: identify missing evidence]
+    F --> G[Action: call registered academic tool]
+    G --> H[Observation: tool result]
+    H --> I{More checks required?}
+    I -- "Yes" --> F
+    I -- "No" --> J{All constraints valid?}
+    J -- "No" --> K[Safe fallback: explain missing prerequisite, conflict, invalid course, or load issue]
+    J -- "Yes" --> L[Final Answer: verified course eligibility or study plan]
+    E --> M[MAX_ITERATIONS / TIMEOUT guardrail]
+    M --> K
