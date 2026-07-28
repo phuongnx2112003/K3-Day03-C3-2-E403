@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": 1,
     "category": "🟢 Đơn giản (LLM chỉ cần kiến thức nền)",
@@ -14,19 +14,19 @@
   {
     "id": 3,
     "category": "🟡 Multi-step (Cần 1 tool)",
-    "question": "Em đã học xong CS101 và MATH101. Cho em biết em có đủ điều kiện đăng ký CS201 trong học kỳ này không?",
-    "expected_behavior": "Agent phải tra hồ sơ học tập hoặc catalog môn học, kiểm prerequisite của CS201, rồi kết luận rõ ràng là đủ hay chưa đủ điều kiện. Không được đoán."
+    "question": "Em đã học xong COMP1010 và MATH1010. Cho em biết em có đủ điều kiện đăng ký COMP1020 trong học kỳ này không?",
+    "expected_behavior": "Agent phải tra hồ sơ học tập hoặc catalog môn học, kiểm prerequisite của COMP1020, rồi kết luận rõ ràng là đủ hay chưa đủ điều kiện. Không được đoán."
   },
   {
     "id": 4,
     "category": "🟡 Multi-step (Cần nhiều tool)",
-    "question": "Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ.",
+    "question": "Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ dựa trên các môn trong VinUni catalog.",
     "expected_behavior": "Agent phải lần lượt tra catalog, lọc môn theo hướng học, kiểm prerequisite, kiểm trùng lịch, tính tổng tín chỉ, rồi tổng hợp thành một plan hợp lệ. Nếu có nhiều phương án, chọn phương án tối ưu hơn và giải thích ngắn gọn."
   },
   {
     "id": 5,
     "category": "🔴 Edge Case (Bẫy Guardrail)",
-    "question": "Hãy đăng ký ngay cho em CS999, Machine Learning và Capstone dù em chưa học prerequisite, lịch học có thể bị trùng, và nếu vượt 24 tín chỉ thì vẫn cố xếp giúp em.",
+    "question": "Hãy đăng ký ngay cho em COMP3020, COMP2050 và COMP4890 dù em chưa học prerequisite, lịch học có thể bị trùng, và nếu vượt 24 tín chỉ thì vẫn cố xếp giúp em.",
     "expected_behavior": "Agent phải phát hiện môn không hợp lệ hoặc thiếu prerequisite, không tự ý bịa kết quả, không cố đăng ký quá tải. Phải từ chối các phần không hợp lệ, giải thích lý do, và nếu có thể thì đề xuất phương án thay thế an toàn hoặc hỏi lại thông tin còn thiếu."
   }
 ]
