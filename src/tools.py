@@ -2,48 +2,56 @@
 🛠️ TOOL REGISTRY & SCHEMAS (Dành cho Role 2: Tool & Spec Engineer)
 Nơi khai báo tất cả các "món đồ nghề" mà ReAct Agent có thể gọi.
 """
-
-def get_weather(location: str) -> str:
+def get_student_profile(student_id: str) -> str:
     """
-    Tra cứu thời tiết hiện tại của một thành phố.
+    Tra cứu thông tin sinh viên dựa trên mã số sinh viên.
     
     Args:
-        location (str): Tên thành phố (Ví dụ: 'Hà Nội', 'TP.HCM', 'Đà Nẵng')
+        student_id (str): Mã số sinh viên (Ví dụ: 'A202601874')
         
     Returns:
-        str: Thông tin thời tiết chi tiết
+        str: Thông tin chi tiết về sinh viên
     """
-    loc_lower = location.lower()
-    if "hà nội" in loc_lower or "ha noi" in loc_lower:
-        return "Thời tiết Hà Nội: 28°C, Nắng nhẹ, Độ ẩm 65%."
-    elif "hồ chí minh" in loc_lower or "tp.hcm" in loc_lower or "hcm" in loc_lower:
-        return "Thời tiết TP.HCM: 33°C, Nắng nóng, Có mây."
-    elif "đà nẵng" in loc_lower or "da nang" in loc_lower:
-        return "Thời tiết Đà Nẵng: 30°C, Gió nhẹ, Mát mẻ."
+    if student_id == "A202601874":
+        return "Thông tin sinh viên:\n- Họ tên: "
     else:
-        return f"LỖI: Không tìm thấy dữ liệu thời tiết cho địa điểm '{location}'."
+        return f"LỖI: Không tìm thấy thông tin sinh viên với mã '{student_id}'."
 
-
-def search_flights(origin: str, destination: str) -> str:
+def search_courses(keywords: str) -> str:
     """
-    Tra cứu chuyến bay giữa hai địa điểm.
+    Tra cứu thông tin khóa học dựa trên từ khóa.
     
     Args:
-        origin (str): Nơi đi (Ví dụ: 'TP.HCM')
-        destination (str): Nơi đến (Ví dụ: 'Hà Nội')
+        keywords (str): Từ khóa liên quan đến khóa học (Ví dụ: 'Python', 'Data Science')
         
     Returns:
-        str: Danh sách chuyến bay khả dụng và giá vé
+        str: Danh sách các khóa học phù hợp
     """
-    return (
-        f"Chuyến bay từ {origin} -> {destination} ngày mai:\n"
-        f"1. VN123 (08:00) - Giá: 1,500,000 VNĐ (Còn vé)\n"
-        f"2. VJ456 (14:30) - Giá: 1,200,000 VNĐ (Còn vé)"
-    )
+    if "python" in keywords.lower():
+        return "Khóa học Python:\n1. Python Cơ Bản\n2. Python Nâng Cao"
+    elif "data science" in keywords.lower():
+        return "Khóa học Data Science:\n1. Data Science Cơ Bản\n2. Machine Learning"
+    else:
+        return f"LỖI: Không tìm thấy khóa học phù hợp với từ khóa '{keywords}'."
 
+def check_prerequisites(student_id, course_codes):
+    pass
+
+def check_schedule_conflicts(course_codes):
+    pass
+
+def calculate_credit_load(student_id, planned_courses):
+    pass
+
+def recommend_course_plan(student_id, goal):
+    pass
 
 # Danh sách các tool được đăng ký để Agent sử dụng
 AVAILABLE_TOOLS = {
-    "get_weather": get_weather,
-    "search_flights": search_flights,
+    "get_student_profile": get_student_profile,
+    "course": course,
+    "check_prerequisites": check_prerequisites,
+    "check_schedule_conflicts": check_schedule_conflicts,
+    "calculate_credit_load": calculate_credit_load,
+    "recommend_course_plan": recommend_course_plan,
 }
