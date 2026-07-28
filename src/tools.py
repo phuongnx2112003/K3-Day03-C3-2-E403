@@ -49,7 +49,7 @@ def recommend_course_plan(student_id, goal):
 # Danh sách các tool được đăng ký để Agent sử dụng
 AVAILABLE_TOOLS = {
     "get_student_profile": get_student_profile,
-    "course": course,
+    "search_courses": search_courses,
     "check_prerequisites": check_prerequisites,
     "check_schedule_conflicts": check_schedule_conflicts,
     "calculate_credit_load": calculate_credit_load,
