@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VinUni AI Course Planning Studio 🌟</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Background Animated Gradients -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <div class="app-container">
+        <!-- HEADER / NAVBAR -->
+        <header class="navbar glass-card">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-graduation-cap"></i>
+                </div>
+                <div class="brand-title">
+                    <h1>VINUNI AI STUDIO</h1>
+                    <span class="badge badge-accent">Course Planning Agent #7</span>
+                </div>
+            </div>
+
+            <!-- AI Mode Switcher -->
+            <div class="mode-selector">
+                <button id="btn-mode-baseline" class="mode-btn active" onclick="switchMode('baseline')">
+                    <i class="fa-regular fa-comment-dots"></i>
+                    <span>Baseline Chatbot</span>
+                    <small>Cấp độ 2 • No Tools</small>
+                </button>
+                <button id="btn-mode-react" class="mode-btn" onclick="switchMode('react')">
+                    <i class="fa-solid fa-brain"></i>
+                    <span>ReAct Agent</span>
+                    <small>Cấp độ 3 • 6 Tools</small>
+                </button>
+            </div>
+
+            <!-- Provider Status -->
+            <div class="provider-status">
+                <div class="status-indicator active">
+                    <span class="pulse-dot"></span>
+                    <span id="provider-label">Provider: Offline Mock Mode</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN WORKSPACE (3 COLUMNS) -->
+        <main class="main-workspace">
+            
+            <!-- LEFT COLUMN: TEST CASES EXPLORER -->
+            <aside class="sidebar left-sidebar glass-card">
+                <div class="sidebar-header">
+                    <i class="fa-solid fa-vial-circle-check text-accent"></i>
+                    <h3>Test Case Explorer</h3>
+                </div>
+                <p class="sidebar-desc">Bấm chọn nhanh các kịch bản kiểm thử chuẩn từ Role 1 (Product Architect):</p>
+                
+                <div id="test-cases-list" class="test-cases-list">
+                    <!-- Loaded dynamically via JS -->
+                    <div class="loading-spinner"><i class="fa-solid fa-spinner fa-spin"></i> Đang tải Test Cases...</div>
+                </div>
+
+                <div class="guardrail-info-card glass-panel">
+                    <h4><i class="fa-solid fa-shield-halved"></i> Guardrails Status</h4>
+                    <ul>
+                        <li><i class="fa-solid fa-check text-success"></i> Zero Hallucination</li>
+                        <li><i class="fa-solid fa-check text-success"></i> Prerequisite Check</li>
+                        <li><i class="fa-solid fa-check text-success"></i> Max Iterations: <strong>5 Steps</strong></li>
+                        <li><i class="fa-solid fa-check text-success"></i> Credit Limit: <strong>15-18 TC</strong></li>
+                    </ul>
+                </div>
+            </aside>
+
+            <!-- CENTER COLUMN: INTERACTIVE CHAT ARENA -->
+            <section class="chat-arena glass-card">
+                <div class="chat-header">
+                    <div class="chat-header-info">
+                        <h2 id="current-mode-title"><i class="fa-regular fa-comment-dots"></i> Baseline Chatbot (Cấp độ 2)</h2>
+                        <p id="current-mode-desc">Trả lời dựa trên kiến thức tĩnh. Không có quyền gọi công cụ tra cứu SIS/Catalog.</p>
+                    </div>
+                    <button class="btn-clear" onclick="clearChat()" title="Xóa lịch sử trò chuyện">
+                        <i class="fa-solid fa-trash-can"></i> Xóa hội thoại
+                    </button>
+                </div>
+
+                <!-- Messages Container -->
+                <div id="chat-messages" class="chat-messages">
+                    <!-- ChatGPT-style Welcome Screen with Prompt Suggestions -->
+                    <div id="welcome-screen" class="welcome-screen">
+                        <div class="welcome-logo-container">
+                            <div class="welcome-logo"><i class="fa-solid fa-graduation-cap"></i></div>
+                            <h2>Hôm nay tôi có thể tư vấn học vụ gì cho bạn?</h2>
+                            <p class="welcome-sub">Chọn một câu hỏi gợi ý bên dưới hoặc chọn Kịch bản kiểm thử ở cột trái:</p>
+                        </div>
+
+                        <div class="starter-grid">
+                            <div class="starter-card" onclick="selectStarterPrompt('Em đã học xong CS101 và MATH101. Cho em biết em có đủ điều kiện đăng ký CS201 trong học kỳ này không?', 'react')">
+                                <div class="starter-icon text-cyan"><i class="fa-solid fa-list-check"></i></div>
+                                <div class="starter-info">
+                                    <strong>Kiểm tra Tiên quyết (Prereq)</strong>
+                                    <span>Tra cứu điều kiện học CS201 / COMP1020</span>
+                                </div>
+                            </div>
+
+                            <div class="starter-card" onclick="selectStarterPrompt('Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ dựa trên catalog.', 'react')">
+                                <div class="starter-icon text-purple"><i class="fa-solid fa-calendar-check"></i></div>
+                                <div class="starter-info">
+                                    <strong>Lập kế hoạch 15-18 TC AI/ML</strong>
+                                    <span>Tự động tra SIS, kiểm trùng lịch & tải trọng</span>
+                                </div>
+                            </div>
+
+                            <div class="starter-card" onclick="selectStarterPrompt('Hãy đăng ký ngay cho em COMP3020, COMP2050 và COMP4890 dù em chưa học prerequisite, lịch học có thể bị trùng, và nếu vượt 24 tín chỉ thì vẫn cố xếp giúp em.', 'react')">
+                                <div class="starter-icon" style="color: #ff4b2b;"><i class="fa-solid fa-shield-halved"></i></div>
+                                <div class="starter-info">
+                                    <strong>Thử nghiệm Bẫy Guardrails</strong>
+                                    <span>Kiểm thử phanh an toàn chống vi phạm 24 TC</span>
+                                </div>
+                            </div>
+
+                            <div class="starter-card" onclick="selectStarterPrompt('Một tín chỉ trong hệ đào tạo đại học thường tương đương khoảng bao nhiêu giờ học và tự học?', 'baseline')">
+                                <div class="starter-icon" style="color: #38ef7d;"><i class="fa-solid fa-book"></i></div>
+                                <div class="starter-info">
+                                    <strong>Định nghĩa 1 Tín chỉ là gì?</strong>
+                                    <span>Hỏi đáp quy chế lý thuyết trên Baseline Chatbot</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area with Permanent Quick Prompts Bar -->
+                <div class="chat-input-area">
+                    <div class="quick-prompts-bar">
+                        <span class="quick-prompt-label"><i class="fa-regular fa-lightbulb"></i> Gợi ý nhanh:</span>
+                        <button type="button" class="quick-pill" onclick="selectStarterPrompt('Em đã học xong CS101 và MATH101. Cho em biết em có đủ điều kiện đăng ký CS201 trong học kỳ này không?', 'react')">🔍 Kiểm tra tiên quyết COMP1020</button>
+                        <button type="button" class="quick-pill" onclick="selectStarterPrompt('Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ dựa trên catalog.', 'react')">📅 Lập kế hoạch 15-18 TC AI/ML</button>
+                        <button type="button" class="quick-pill" onclick="selectStarterPrompt('Hãy đăng ký ngay cho em COMP3020, COMP2050 và COMP4890 dù em chưa học prerequisite, lịch học có thể bị trùng, và nếu vượt 24 tín chỉ thì vẫn cố xếp giúp em.', 'react')">🛡️ Thử nghiệm bẫy Guardrails</button>
+                        <button type="button" class="quick-pill" onclick="selectStarterPrompt('Một tín chỉ trong hệ đào tạo đại học thường tương đương khoảng bao nhiêu giờ học và tự học?', 'baseline')">📘 1 Tín chỉ là gì?</button>
+                    </div>
+
+                    <form id="chat-form" onsubmit="handleSend(event)">
+                        <div class="input-wrapper chatgpt-input">
+                            <textarea id="user-input" rows="1" placeholder="Nhập câu hỏi học vụ hoặc nhờ AI xếp thời khóa biểu..." required onkeydown="handleEnter(event)"></textarea>
+                            <button type="submit" class="btn-send-pill" id="btn-send" title="Gửi tin nhắn">
+                                <i class="fa-solid fa-arrow-up"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: ACADEMIC LIVE WIDGETS -->
+            <aside class="sidebar right-sidebar glass-card">
+                <div class="sidebar-header">
+                    <i class="fa-solid fa-id-card text-cyan"></i>
+                    <h3>Student Profile Live</h3>
+                </div>
+
+                <!-- Profile Widget -->
+                <div id="profile-widget" class="widget-box glass-panel">
+                    <div class="profile-header">
+                        <div class="profile-avatar">NX</div>
+                        <div class="profile-info">
+                            <h4 id="profile-name">Nguyễn Xuân Phượng</h4>
+                            <span id="profile-id" class="badge badge-outline">2A202601874 / A202601874</span>
+                        </div>
+                    </div>
+                    <div class="profile-stats">
+                        <div class="stat-item">
+                            <span class="stat-label">GPA</span>
+                            <span class="stat-val text-accent">3.78</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Tín chỉ</span>
+                            <span class="stat-val text-cyan">45 TC</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Ngành</span>
+                            <span class="stat-val">CS (Năm 2)</span>
+                        </div>
+                    </div>
+                    <div class="completed-courses-list">
+                        <h5><i class="fa-solid fa-check-double text-success"></i> Môn đã hoàn thành:</h5>
+                        <div class="tag-cloud">
+                            <span class="tag tag-success">CS101 / COMP1010 (A)</span>
+                            <span class="tag tag-success">MATH101 / MATH1010 (A-)</span>
+                            <span class="tag tag-success">ELEC1010 (B+)</span>
+                            <span class="tag tag-success">GENE1010 (A)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="sidebar-header mt-4">
+                    <i class="fa-solid fa-book-open-reader text-purple"></i>
+                    <h3>Course Catalog Lookup</h3>
+                </div>
+
+                <!-- Catalog Widget -->
+                <div id="catalog-widget" class="widget-box glass-panel catalog-box">
+                    <div class="catalog-item">
+                        <div class="catalog-top">
+                            <strong>CS201 / COMP1020</strong>
+                            <span class="badge badge-sm">3 TC</span>
+                        </div>
+                        <div class="catalog-title">Data Structures & OOP</div>
+                        <div class="catalog-prereq">Prereq: CS101 / COMP1010</div>
+                    </div>
+                    <div class="catalog-item">
+                        <div class="catalog-top">
+                            <strong>AI301 / COMP2050</strong>
+                            <span class="badge badge-sm badge-ai">AI/ML</span>
+                        </div>
+                        <div class="catalog-title">Artificial Intelligence & ML</div>
+                        <div class="catalog-prereq">Prereq: CS201, MATH101</div>
+                    </div>
+                    <div class="catalog-item">
+                        <div class="catalog-top">
+                            <strong>COMP3020</strong>
+                            <span class="badge badge-sm badge-ai">AI/ML</span>
+                        </div>
+                        <div class="catalog-title">Advanced Machine Learning</div>
+                        <div class="catalog-prereq">Prereq: COMP2050 / AI301</div>
+                    </div>
+                    <div class="catalog-item">
+                        <div class="catalog-top">
+                            <strong>CAP401 / COMP4890</strong>
+                            <span class="badge badge-sm badge-ai">AI/ML</span>
+                        </div>
+                        <div class="catalog-title">Capstone & Deep Learning</div>
+                        <div class="catalog-prereq">Prereq: CS201, AI301 / COMP3020</div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
