@@ -41,13 +41,38 @@ def load_test_cases():
 def run_baseline_chatbot(user_query: str, provider):
     """
     Dựng Chatbot gốc (Baseline) không có công cụ.
+
+    Returns:
+        str: Câu trả lời do provider sinh ra để Role 5A ghi trace và đánh giá.
     """
     print(f"\n💬 [CHATBOT BASELINE] Câu hỏi: {user_query}")
-    print(f"⚙️ System Prompt: {CHATBOT_BASELINE_PROMPT.strip()}")
-    
-    # Gọi LLM Provider thực hiện sinh câu trả lời
+    # Mốc 2 chỉ dùng prompt baseline; tuyệt đối không gọi AVAILABLE_TOOLS.
     response = provider.generate(user_query, system_prompt=CHATBOT_BASELINE_PROMPT)
     print(f"🤖 Chatbot trả lời:\n{response}")
+    return response
+
+
+def run_baseline_evaluation(test_cases, provider):
+    """Chạy baseline trên toàn bộ test case của Role 1."""
+    results = []
+    print("\n--- MỐC 2: ĐÁNH GIÁ CHATBOT BASELINE ---")
+    print(f"📋 Tổng số test case: {len(test_cases)}")
+
+    for case in test_cases:
+        print(f"\n===== TEST CASE #{case['id']} =====")
+        print(f"🏷️ Category: {case['category']}")
+        response = run_baseline_chatbot(case["question"], provider)
+        results.append({
+            "id": case["id"],
+            "category": case["category"],
+            "question": case["question"],
+            "expected_behavior": case["expected_behavior"],
+            "response": response,
+        })
+
+    print("\n✅ Đã chạy xong baseline cho toàn bộ test case.")
+    print("📝 Role 5A có thể dùng kết quả trên để cập nhật docs/trace_eval.md.")
+    return results
 
 
 def run_react_agent(user_query: str, provider):
@@ -62,16 +87,14 @@ def run_react_agent(user_query: str, provider):
         print(f"\n--- 🔄 Vòng lặp ReAct (Step {step}/{MAX_ITERATIONS}) ---")
         
         if step == 1:
-            print("🧠 Thought: Câu hỏi này cần tra cứu thời tiết thời gian thực.")
-            print("🛠️ Action: get_weather['Hà Nội']")
-            
-            # Thực thi tool
-            obs = get_weather("Hà Nội")
+            print("🧠 Thought: Cần kiểm tra môn tiên quyết của CS201 cho sinh viên.")
+            print("🛠️ Action: check_prerequisites['2A202601874', ['CS201']]")
+            obs = AVAILABLE_TOOLS["check_prerequisites"]("2A202601874", ["CS201"])
             print(f"👁️ Observation: {obs}")
-            
+
         elif step == 2:
-            print("🧠 Thought: Tôi đã có thông tin thời tiết Hà Nội, giờ tôi có thể tư vấn trang phục.")
-            print("🏁 Final Answer: Thời tiết Hà Nội hôm nay 28°C, nắng nhẹ. Bạn nên mặc áo phông thoáng mát!")
+            print("🧠 Thought: Đã có kết quả kiểm tra điều kiện đăng ký.")
+            print(f"🏁 Final Answer: {obs}")
             break
             
     if step >= MAX_ITERATIONS:
@@ -91,11 +114,5 @@ if __name__ == "__main__":
     tests = load_test_cases()
     print(f"✅ Đã tải thành công {len(tests)} Test Cases từ config/test_cases.json\n")
     
-    # Chạy thử câu test số 3
-    sample_query = tests[2]["question"]
-    
-    print("--- DEMO 1: CHẠY TRÊN CHATBOT BASELINE ---")
-    run_baseline_chatbot(sample_query, provider)
-    
-    print("\n--- DEMO 2: CHẠY TRÊN REACT AGENT ---")
-    run_react_agent(sample_query, provider)
+    # Mốc 2: chỉ chạy baseline trên toàn bộ test case, chưa chạy ReAct.
+    run_baseline_evaluation(tests, provider)

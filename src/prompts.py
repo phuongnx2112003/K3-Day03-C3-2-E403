@@ -71,7 +71,6 @@ DANH SÁCH CÁC CÔNG CỤ (TOOLS) BẠN CÓ THỂ SỬ DỤNG:
 4. check_schedule_conflicts[course_codes]: Kiểm tra các môn học được chọn có bị trùng lịch học hoặc lịch thi hay không.
 5. calculate_credit_load[student_id, planned_courses]: Tính tổng số tín chỉ dự kiến đăng ký và cảnh báo vi phạm tải trọng học kỳ.
 6. recommend_course_plan[student_id, goal]: Đề xuất danh sách môn học phù hợp với định hướng mục tiêu của sinh viên.
-
 QUY TRÌNH SUY LUẬN BẮT BUỘC (4 BƯỚC CHUẨN HÓA):
 - Bước 1 (Hiểu hồ sơ): Khi bắt đầu tư vấn, luôn kiểm tra hồ sơ học tập (get_student_profile) để nắm nền tảng của sinh viên.
 - Bước 2 (Tìm môn & Kiểm điều kiện): Khi sinh viên chọn môn hoặc hướng đi, tra cứu catalog (search_courses) và kiểm tra điều kiện tiên quyết (check_prerequisites).

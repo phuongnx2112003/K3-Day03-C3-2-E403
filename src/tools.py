@@ -1,119 +1,110 @@
-"""
-🛠️ TOOL REGISTRY & SCHEMAS (Role 2: Tool & Spec Engineer)
+"""Các công cụ cho trợ lý kiểm tra điều kiện đăng ký môn và lập kế hoạch học kỳ."""
 
-Nơi khai báo tất cả các công cụ (Tools) mà ReAct Agent có thể sử dụng
-để hỗ trợ sinh viên lập kế hoạch đăng ký môn học.
-"""
+CATALOG = {
+    "CS101": {"name": "Introduction to Programming", "credits": 3, "prerequisites": []},
+    "MATH101": {"name": "Calculus I", "credits": 3, "prerequisites": []},
+    "CS201": {"name": "Data Structures", "credits": 3, "prerequisites": ["CS101"]},
+    "AI301": {"name": "Machine Learning", "credits": 3, "prerequisites": ["CS201", "MATH101"]},
+    "CAP401": {"name": "Capstone Project", "credits": 6, "prerequisites": ["CS201", "AI301"]},
+}
+
+STUDENT_RECORDS = {
+    "2A202601874": {"name": "Nguyễn Xuân Phượng", "completed_courses": ["CS101", "MATH101"]},
+}
+
+COURSE_SCHEDULES = {
+    "CS201": "Thứ 2, 08:00-10:00",
+    "AI301": "Thứ 2, 09:00-11:00",
+    "CAP401": "Thứ 4, 13:00-16:00",
+}
 
 
 def get_student_profile(student_id: str) -> str:
-    """
-    Lấy thông tin hồ sơ của sinh viên dựa trên mã số sinh viên.
-
-    Bao gồm các thông tin như:
-    - Ngành học
-    - Năm học
-    - GPA hiện tại
-    - Danh sách môn đã hoàn thành
-    - Tổng số tín chỉ đã tích lũy
-
-    Args:
-        student_id (str): Mã số sinh viên (Ví dụ: "A202601874").
-
-    Returns:
-        str: Thông tin chi tiết của sinh viên hoặc thông báo lỗi nếu không tìm thấy.
-    """
-    pass
+    """Tra cứu hồ sơ và các môn đã hoàn thành của sinh viên."""
+    student = STUDENT_RECORDS.get(student_id)
+    if not student:
+        return f"LỖI [INVALID_ID]: Không tìm thấy sinh viên với mã '{student_id}'."
+    return f"Sinh viên: {student['name']}\nMôn đã hoàn thành: {', '.join(student['completed_courses'])}"
 
 
-def search_courses(keyword_or_area: str) -> str:
-    """
-    Tra cứu danh sách môn học trong Course Catalog theo từ khóa hoặc lĩnh vực.
-
-    Có thể tìm kiếm theo:
-    - Tên môn học
-    - Mã môn học
-    - Lĩnh vực (AI, Data Science, Programming,...)
-
-    Args:
-        keyword_or_area (str): Từ khóa hoặc lĩnh vực cần tìm.
-
-    Returns:
-        str: Danh sách các môn học phù hợp hoặc thông báo nếu không tìm thấy.
-    """
-    pass
+def search_courses(keywords: str) -> str:
+    """Tra cứu môn học theo mã môn hoặc tên môn."""
+    query = keywords.lower().strip()
+    matches = [
+        f"{code}: {course['name']} ({course['credits']} tín chỉ)"
+        for code, course in CATALOG.items()
+        if query in code.lower() or query in course["name"].lower()
+    ]
+    if not matches:
+        return f"LỖI [COURSE_NOT_FOUND]: Không tìm thấy môn phù hợp với '{keywords}'."
+    return "\n".join(matches)
 
 
-def check_prerequisites(student_id: str, course_codes: list) -> str:
-    """
-    Kiểm tra sinh viên có đáp ứng điều kiện tiên quyết (Prerequisites)
-    của các môn học dự định đăng ký hay không.
-
-    Args:
-        student_id (str): Mã số sinh viên.
-        course_codes (list): Danh sách mã môn cần kiểm tra.
-
-    Returns:
-        str: Kết quả kiểm tra điều kiện tiên quyết của từng môn học.
-    """
-    pass
-
-
-def check_schedule_conflicts(course_codes: list) -> str:
-    """
-    Kiểm tra xung đột lịch học hoặc lịch thi giữa các môn học đã chọn.
-
-    Args:
-        course_codes (list): Danh sách mã môn học.
-
-    Returns:
-        str: Kết quả cho biết có hoặc không có xung đột lịch học/lịch thi.
-    """
-    pass
+def check_prerequisites(student_id: str, course_codes: list[str]) -> str:
+    """Kiểm tra sinh viên có đủ môn tiên quyết cho danh sách môn hay không."""
+    student = STUDENT_RECORDS.get(student_id)
+    if not student:
+        return f"LỖI [INVALID_ID]: Không tìm thấy sinh viên với mã '{student_id}'."
+    completed = set(student["completed_courses"])
+    missing = {}
+    unknown = []
+    for code in course_codes:
+        course = CATALOG.get(code.upper())
+        if not course:
+            unknown.append(code)
+            continue
+        unmet = [item for item in course["prerequisites"] if item not in completed]
+        if unmet:
+            missing[code.upper()] = unmet
+    if unknown:
+        return f"LỖI [COURSE_NOT_FOUND]: Không tồn tại môn {', '.join(unknown)}."
+    if missing:
+        details = "; ".join(f"{code} thiếu {', '.join(items)}" for code, items in missing.items())
+        return f"CHƯA ĐỦ ĐIỀU KIỆN: {details}."
+    return f"ĐỦ ĐIỀU KIỆN đăng ký: {', '.join(code.upper() for code in course_codes)}."
 
 
-def calculate_credit_load(student_id: str, planned_courses: list) -> str:
-    """
-    Tính tổng số tín chỉ của các môn học dự kiến đăng ký trong học kỳ.
+def check_schedule_conflicts(course_codes: list[str]) -> str:
+    """Kiểm tra trùng lịch học trong danh sách môn dự kiến."""
+    seen = {}
+    conflicts = []
+    for code in course_codes:
+        schedule = COURSE_SCHEDULES.get(code.upper())
+        if schedule and schedule in seen:
+            conflicts.append(f"{seen[schedule]} và {code.upper()} ({schedule})")
+        elif schedule:
+            seen[schedule] = code.upper()
+    if conflicts:
+        return "LỖI [SCHEDULE_CONFLICT]: " + "; ".join(conflicts)
+    return "Không phát hiện trùng lịch học."
 
-    Đồng thời kiểm tra tổng số tín chỉ có nằm trong giới hạn cho phép
-    theo quy định của nhà trường hay không.
 
-    Args:
-        student_id (str): Mã số sinh viên.
-        planned_courses (list): Danh sách mã môn dự kiến đăng ký.
-
-    Returns:
-        str: Tổng số tín chỉ và kết quả đánh giá khối lượng học tập.
-    """
-    pass
+def calculate_credit_load(student_id: str, planned_courses: list[str]) -> str:
+    """Tính tổng tín chỉ và kiểm tra giới hạn 12-18 tín chỉ mỗi kỳ."""
+    if student_id not in STUDENT_RECORDS:
+        return f"LỖI [INVALID_ID]: Không tìm thấy sinh viên với mã '{student_id}'."
+    unknown = [code for code in planned_courses if code.upper() not in CATALOG]
+    if unknown:
+        return f"LỖI [COURSE_NOT_FOUND]: Không tồn tại môn {', '.join(unknown)}."
+    total = sum(CATALOG[code.upper()]["credits"] for code in planned_courses)
+    if total > 18:
+        return f"LỖI [CREDIT_LOAD_VIOLATION]: {total} tín chỉ vượt mức tối đa 18 tín chỉ/kỳ."
+    if total < 12:
+        return f"CẢNH BÁO [CREDIT_LOAD_VIOLATION]: {total} tín chỉ thấp hơn mức khuyến nghị tối thiểu 12 tín chỉ/kỳ."
+    return f"Tải học kỳ hợp lệ: {total} tín chỉ."
 
 
 def recommend_course_plan(student_id: str, goal: str) -> str:
-    """
-    Đề xuất kế hoạch học tập phù hợp với mục tiêu của sinh viên.
+    """Đề xuất kế hoạch mẫu dựa trên mục tiêu học tập sau khi kiểm tra điều kiện."""
+    if student_id not in STUDENT_RECORDS:
+        return f"LỖI [INVALID_ID]: Không tìm thấy sinh viên với mã '{student_id}'."
+    plan = ["CS201", "AI301", "CAP401"] if "AI" in goal.upper() else ["CS201", "MATH101"]
+    return (
+        f"Kế hoạch đề xuất: {', '.join(plan)}\n"
+        f"{check_prerequisites(student_id, plan)}\n"
+        f"{check_schedule_conflicts(plan)}"
+    )
 
-    Việc gợi ý có thể dựa trên:
-    - Hồ sơ sinh viên
-    - Các môn đã hoàn thành
-    - Điều kiện tiên quyết
-    - Khối lượng tín chỉ
-    - Mục tiêu nghề nghiệp hoặc học tập
-
-    Args:
-        student_id (str): Mã số sinh viên.
-        goal (str): Mục tiêu học tập hoặc nghề nghiệp
-            (Ví dụ: "AI Engineer", "Data Scientist").
-
-    Returns:
-        str: Danh sách các môn học được đề xuất kèm giải thích.
-    """
-    pass
-
-
-# ==========================
-# Tool Registry
-# ==========================
 
 AVAILABLE_TOOLS = {
     "get_student_profile": get_student_profile,
