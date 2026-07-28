@@ -80,11 +80,19 @@ def run_baseline_evaluation(test_cases, provider):
 
 
 def parse_action(response: str):
-    """Parse Action: tool[args] bằng AST, không dùng eval không an toàn."""
-    match = re.search(r"Action:\s*([A-Za-z_]\w*)\s*(\[.*\])", response, re.DOTALL)
+    """Parse ``Action: tool[args]`` an toàn, kể cả khi model bỏ dấu nháy.
+
+    LLM đôi khi sinh ``search_courses[COMP1020]`` thay vì chuỗi Python hợp lệ.
+    Với một đối số không có dấu nháy, giữ nguyên nội dung như một chuỗi thay vì
+    biến nó thành lỗi cú pháp và lặp vô ích đến MAX_ITERATIONS.
+    """
+    match = re.search(
+        r"(?m)^Action:\s*([A-Za-z_]\w*)\s*\[(.*?)\](?:\s+Observation:.*)?\s*$",
+        response,
+    )
     if not match:
         return None, None
-    tool_name, args_text = match.group(1), match.group(2)[1:-1]
+    tool_name, args_text = match.group(1), match.group(2).strip()
     try:
         call = ast.parse(f"f({args_text})", mode="eval").body
         if not isinstance(call, ast.Call) or call.keywords:
@@ -92,6 +100,8 @@ def parse_action(response: str):
         args = [ast.literal_eval(argument) for argument in call.args]
         return tool_name, args
     except (SyntaxError, ValueError, TypeError) as exc:
+        if args_text and "," not in args_text:
+            return tool_name, [args_text]
         return None, f"LỖI [MALFORMED_ACTION]: {exc}"
 
 

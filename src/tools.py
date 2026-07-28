@@ -78,6 +78,11 @@ def search_official_sources(query: str, max_results: int = 3) -> str:
     """
     query_text = " ".join(str(query).lower().split())
     terms = [term for term in query_text.split() if len(term) > 2]
+    # PDF nguồn là tiếng Anh; map các cách hỏi phổ biến bằng tiếng Việt sang
+    # thuật ngữ xuất hiện trong Academic Regulations để tránh kết quả nhiễu.
+    if any(token in query_text for token in ("tải trọng", "tín chỉ", "học kỳ", "credit", "study load")):
+        terms.extend(["study", "load", "credit", "semester"])
+    terms = list(dict.fromkeys(terms))
     phrases = [query_text]
     if len(terms) > 1:
         phrases.extend(" ".join(terms[index:index + 2]) for index in range(len(terms) - 1))

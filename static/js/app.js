@@ -4,13 +4,59 @@
 ========================================================== */
 
 let currentMode = 'react'; // 'baseline' or 'react'
-let currentProvider = 'mock';
 
 document.addEventListener("DOMContentLoaded", () => {
     loadTestCases();
+    loadDashboardData();
     // Default mode is ReAct (Cấp độ 3)
     switchMode('react');
 });
+
+/* --- 0. LOAD THE SAME FIXTURES USED BY src/tools.py --- */
+async function loadDashboardData() {
+    try {
+        const [profileResponse, catalogResponse] = await Promise.all([
+            fetch("/api/student-profile"),
+            fetch("/api/catalog"),
+            loadProviderStatus()
+        ]);
+        const profile = await profileResponse.json();
+        const catalog = await catalogResponse.json();
+
+        if (profile.status === "success") renderProfile(profile.data);
+        if (catalog.status === "success") renderCatalog(catalog.data);
+    } catch (err) {
+        console.error("Không thể tải dữ liệu fixture cho dashboard:", err);
+    }
+}
+
+async function loadProviderStatus() {
+    const response = await fetch("/api/status");
+    const status = await response.json();
+    if (status.status === "success") {
+        document.getElementById("provider-label").textContent = `Provider: ${status.provider} (${status.model})`;
+    }
+}
+
+function renderProfile(profile) {
+    document.getElementById("profile-name").textContent = profile.name;
+    document.getElementById("profile-id").textContent = profile.id;
+    document.getElementById("completed-courses").innerHTML = profile.completed_courses
+        .map((course) => `<span class="tag tag-success">${escapeHtml(course)}</span>`)
+        .join("");
+}
+
+function renderCatalog(courses) {
+    document.getElementById("catalog-widget").innerHTML = courses.map((course) => {
+        const prereq = course.prerequisites.length ? course.prerequisites.join(", ") : "Không có";
+        return `
+            <div class="catalog-item">
+                <div class="catalog-top"><strong>${escapeHtml(course.code)}</strong><span class="badge badge-sm">${course.credits} TC</span></div>
+                <div class="catalog-title">${escapeHtml(course.name)}</div>
+                <div class="catalog-prereq">Prereq: ${escapeHtml(prereq)}</div>
+            </div>`;
+    }).join("");
+}
 
 /* --- 1. LOAD TEST CASES FROM BACKEND --- */
 async function loadTestCases() {
@@ -109,13 +155,13 @@ function switchMode(mode) {
         btnReact.classList.remove("active");
         titleEl.innerHTML = `<i class="fa-regular fa-comment-dots"></i> Baseline Chatbot (Cấp độ 2)`;
         titleEl.style.color = "#00c6ff";
-        descEl.innerText = "Trả lời dựa trên kiến thức tĩnh. Không có quyền gọi công cụ tra cứu SIS/Catalog.";
+        descEl.innerText = "Trả lời bằng provider hiện tại, không gọi tool học vụ.";
     } else {
         btnReact.classList.add("active");
         btnBaseline.classList.remove("active");
         titleEl.innerHTML = `<i class="fa-solid fa-brain"></i> ReAct Planning Agent (Cấp độ 3)`;
         titleEl.style.color = "#d8b4fe";
-        descEl.innerText = "Tích hợp 6 công cụ (Tools) tra cứu hồ sơ, kiểm tiên quyết COMP1010, trùng lịch & xếp lộ trình tự động!";
+        descEl.innerText = "Dùng 7 tools từ backend: nguồn chính thức, hồ sơ, catalog, prerequisite, lịch và tải tín chỉ.";
     }
 }
 
@@ -144,8 +190,7 @@ async function handleSend(event) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 query: query,
-                mode: currentMode,
-                provider: currentProvider
+                mode: currentMode
             })
         });
         
@@ -228,7 +273,7 @@ function appendAIMessage(resData) {
     let html = `<div class="avatar ai-avatar"><i class="fa-solid fa-robot"></i></div>`;
     html += `<div class="message-content glass-panel">`;
 
-    // A. Check if guardrail was triggered
+    // A. A safety-policy decision is distinct from a runtime iteration limit.
     if (resData.guardrail_triggered) {
         html += `
             <div class="guardrail-alert">
@@ -239,6 +284,13 @@ function appendAIMessage(resData) {
                 </div>
             </div>
         `;
+    }
+    if (resData.agent_status === "max_iterations") {
+        html += `
+            <div class="guardrail-alert" style="border-color: var(--color-warning); color: var(--color-warning);">
+                <i class="fa-solid fa-clock"></i>
+                <div><div>AGENT DỪNG Ở GIỚI HẠN SUY LUẬN</div><small style="font-weight: 400; color: var(--text-muted);">Đây không phải kết luận vi phạm quy chế. Hãy thử diễn đạt ngắn gọn hơn hoặc chọn một test case.</small></div>
+            </div>`;
     }
 
     // B. Render ReAct Steps (If any)
@@ -311,11 +363,11 @@ function clearChat() {
             </div>
 
             <div class="starter-grid">
-                <div class="starter-card" onclick="selectStarterPrompt('Em đã học xong CS101 và MATH101. Cho em biết em có đủ điều kiện đăng ký CS201 trong học kỳ này không?', 'react')">
+                <div class="starter-card" onclick="selectStarterPrompt('Em đã học xong COMP1010 và MATH1010. Cho em biết em có đủ điều kiện đăng ký COMP1020 không?', 'react')">
                     <div class="starter-icon text-cyan"><i class="fa-solid fa-list-check"></i></div>
                     <div class="starter-info">
                         <strong>Kiểm tra Tiên quyết (Prereq)</strong>
-                        <span>Tra cứu điều kiện học CS201 / COMP1020</span>
+                        <span>Tra cứu điều kiện học COMP1020</span>
                     </div>
                 </div>
 
@@ -323,7 +375,7 @@ function clearChat() {
                     <div class="starter-icon text-purple"><i class="fa-solid fa-calendar-check"></i></div>
                     <div class="starter-info">
                         <strong>Lập kế hoạch 15-18 TC AI/ML</strong>
-                        <span>Tự động tra SIS, kiểm trùng lịch & tải trọng</span>
+                        <span>Dùng fixture cục bộ, kiểm tra prerequisite & tải tín chỉ</span>
                     </div>
                 </div>
 
@@ -365,7 +417,7 @@ function escapeHtml(text) {
 /* Simple Markdown to HTML Parser for clean tables, headers, bold and bullets */
 function parseMarkdown(md) {
     if (!md) return "";
-    let html = md;
+    let html = escapeHtml(md);
     
     // Headers
     html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');

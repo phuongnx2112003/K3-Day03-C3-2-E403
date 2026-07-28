@@ -4,3 +4,4 @@ anthropic
 python-dotenv
 requests
 pypdf
+flask

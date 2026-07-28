@@ -40,6 +40,15 @@ LLM_PROVIDER=mock python src/app.py
 
 Để dùng LLM thật, cấu hình `LLM_PROVIDER` và API key trong `.env`.
 
+## Chạy giao diện web
+
+```bash
+python3 src/web_app.py
+```
+
+Mở `http://127.0.0.1:5000`. Giao diện dùng trực tiếp catalog, hồ sơ fixture và
+vòng ReAct trong `src/tools.py`/`src/app.py`; provider được lấy từ `LLM_PROVIDER`.
+
 ## Phân công
 
 Chi tiết phân công và checklist nằm trong [docs/PHAN_CONG_CONG_VIEC.md](docs/PHAN_CONG_CONG_VIEC.md).
