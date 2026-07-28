@@ -11,5 +11,6 @@ flowchart TD
     I -- "No" --> J{All constraints valid?}
     J -- "No" --> K[Safe fallback: explain missing prerequisite, conflict, invalid course, or load issue]
     J -- "Yes" --> L[Final Answer: verified course eligibility or study plan]
-    E --> M[MAX_ITERATIONS / TIMEOUT guardrail]
-    M --> K
+    E --> M{Provider/tool timeout, malformed action, or MAX_ITERATIONS?}
+    M -- "Yes" --> K
+    M -- "No" --> F

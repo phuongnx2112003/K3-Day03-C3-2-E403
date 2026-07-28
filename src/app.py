@@ -135,6 +135,14 @@ def _requires_verified_plan(query: str) -> bool:
     return any(term in normalized for term in ("kế hoạch", "15 đến 18", "15-18"))
 
 
+def _is_forced_registration_request(query: str) -> bool:
+    """Nhận diện yêu cầu ép đăng ký bỏ qua quy tắc để chạy guardrail đầy đủ."""
+    normalized = query.lower()
+    return "đăng ký ngay" in normalized and any(
+        phrase in normalized for phrase in ("dù", "bỏ qua", "vẫn cố", "vượt")
+    )
+
+
 def _plan_verification_fallback(verified_tools: set[str]) -> str:
     required_tools = {"search_courses", "check_prerequisites", "check_schedule_conflicts", "calculate_credit_load"}
     missing_tools = required_tools - verified_tools
@@ -167,7 +175,8 @@ def run_catalog_plan_workflow(user_query: str):
         code for code, course in CATALOG.items()
         if code not in completed and set(course["prerequisites"]).issubset(completed)
     ]
-    planned_courses.sort()
+    # Đưa các môn nền AI/ML lên trước, sau đó mới dùng GenEd để đủ tải tín chỉ.
+    planned_courses.sort(key=lambda code: ("AI/ML" not in CATALOG[code].get("area", ""), code))
     trace = []
 
     def observe(step, thought, action, tool_name, args):
@@ -230,6 +239,34 @@ def run_catalog_plan_workflow(user_query: str):
     return {"answer": answer, "trace": trace, "status": "verification_incomplete"}
 
 
+def run_forced_registration_guardrail(user_query: str):
+    """Kiểm chứng toàn bộ trước khi từ chối yêu cầu ép đăng ký.
+
+    Guardrail không suy đoán "có thể trùng" hay "có thể quá tải": nó gọi tool
+    trên đúng mã môn trong câu hỏi và chỉ kết luận từ Observation nhận được.
+    """
+    student_id = next(iter(STUDENT_RECORDS))
+    course_codes = list(dict.fromkeys(re.findall(r"\b[A-Z]{4}\d{4}\b", user_query.upper())))
+    trace = []
+
+    def observe(step, thought, action, tool_name, args):
+        observation = call_tool_with_timeout(tool_name, args)
+        trace.append({"step": step, "assistant": f"Thought: {thought}\nAction: {action}"})
+        trace.append({"step": step, "observation": observation})
+        return observation
+
+    profile = observe(1, "Cần xác định hồ sơ trước khi đánh giá yêu cầu đăng ký.", f"get_student_profile['{student_id}']", "get_student_profile", [student_id])
+    prerequisites = observe(2, "Phải kiểm prerequisite của đúng các môn được yêu cầu.", f"check_prerequisites['{student_id}', {course_codes}]", "check_prerequisites", [student_id, course_codes])
+    schedule = observe(3, "Phải kiểm lịch thực tế trong fixture trước khi kết luận trùng lịch.", f"check_schedule_conflicts[{course_codes}]", "check_schedule_conflicts", [course_codes])
+    credit = observe(4, "Phải tính tổng tín chỉ thực tế thay vì suy đoán quá tải.", f"calculate_credit_load['{student_id}', {course_codes}]", "calculate_credit_load", [student_id, course_codes])
+    answer = (
+        "Không thể tự đăng ký hoặc bỏ qua quy định học vụ.\n"
+        f"Hồ sơ: {profile}\nPrerequisite: {prerequisites}\nLịch: {schedule}\nTải tín chỉ: {credit}\n"
+        "Chỉ khi tất cả kiểm chứng hợp lệ, sinh viên mới nên gửi đăng ký qua hệ thống chính thức."
+    )
+    return {"answer": answer, "trace": trace, "status": "guardrail_triggered"}
+
+
 def _provider_failure_message(response: str) -> str | None:
     """Nhận diện lỗi mà provider trả về dưới dạng text thay vì exception."""
     normalized = response.lower()
@@ -289,6 +326,8 @@ def call_provider_with_timeout(provider, prompt: str, system_prompt: str):
 def run_react_agent(user_query: str, provider):
     """Chạy ReAct động: LLM → Action → tool → Observation → LLM."""
     print(f"\n🤖 [REACT AGENT] Câu hỏi: {user_query}")
+    if _is_forced_registration_request(user_query):
+        return run_forced_registration_guardrail(user_query)
     if _requires_verified_plan(user_query):
         return run_catalog_plan_workflow(user_query)
     conversation = f"User: {user_query}"

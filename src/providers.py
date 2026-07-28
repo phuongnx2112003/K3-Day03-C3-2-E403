@@ -141,7 +141,7 @@ class OpenRouterProvider(BaseLLMProvider):
     """OpenRouter Provider (Hỗ trợ gọi mọi model qua OpenRouter API)"""
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
-        self.model_name = model or os.getenv("LLM_MODEL") or "google/gemini-2.5-flash"
+        self.model_name = model or os.getenv("LLM_MODEL") or "google/gemini-3.6-flash"
         
     def generate(self, prompt: str, system_prompt: str = "") -> str:
         if not self.api_key or self.api_key == "your_openrouter_api_key_here":

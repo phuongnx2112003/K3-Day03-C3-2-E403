@@ -41,6 +41,8 @@ CATALOG = {
     "MATH1010": {"name": "Calculus I", "credits": 4, "prerequisites": [], "area": "Mathematics"},
     "STAT1010": {"name": "Probability and Statistics", "credits": 3, "prerequisites": [], "area": "Mathematics, AI/ML"},
     "MATH2010": {"name": "Linear Algebra", "credits": 3, "prerequisites": [], "area": "Mathematics, AI/ML"},
+    "GENE1010": {"name": "Academic Writing", "credits": 3, "prerequisites": [], "area": "General Education"},
+    "GENE1020": {"name": "Critical Thinking", "credits": 3, "prerequisites": [], "area": "General Education"},
     "COMP1020": {"name": "Object-oriented Programming and Data Structures", "credits": 4, "prerequisites": ["COMP1010"], "area": "Core CS, AI/ML foundation"},
     "COMP2030": {"name": "Software Construction", "credits": 4, "prerequisites": ["COMP1020"], "area": "Core CS"},
     "COMP2050": {"name": "Artificial Intelligence", "credits": 4, "prerequisites": ["COMP1010", "STAT1010"], "area": "AI/ML"},
@@ -49,6 +51,7 @@ CATALOG = {
         "name": "Machine Learning",
         "credits": 4,
         "prerequisites": ["MATH2010", "STAT1010", "COMP1020", "COMP2030"],
+        "area": "AI/ML",
     },
     "COMP3030": {"name": "Databases and Database Systems", "credits": 3, "prerequisites": ["COMP1020", "COMP2030"]},
     "COMP4890": {"name": "Graduation Thesis/Capstone", "credits": 6, "prerequisites": ["COMP1020", "COMP2030", "COMP3010"]},
@@ -62,6 +65,10 @@ STUDENT_RECORDS = {
 }
 
 COURSE_SCHEDULES = {
+    "MATH2010": "Mon 10:00-12:00",
+    "STAT1010": "Tue 10:00-12:00",
+    "GENE1010": "Wed 10:00-12:00",
+    "GENE1020": "Thu 10:00-12:00",
     "COMP1020": "Mon 08:00-10:00",
     "COMP2030": "Tue 08:00-10:00",
     "COMP2050": "Wed 08:00-10:00",
@@ -372,9 +379,9 @@ def recommend_course_plan(student_id: str, goal: str) -> str:
     """Đề xuất kế hoạch an toàn và báo rõ các điều kiện chưa đáp ứng."""
     if str(student_id).strip() not in STUDENT_RECORDS:
         return f"LỖI [INVALID_ID]: Không tìm thấy sinh viên với mã '{student_id}'."
-    candidates = ["COMP1020", "MATH2010", "STAT1010", "COMP2030", "COMP2050", "COMP3010", "COMP3030"]
+    candidates = [code for code in CATALOG if code not in STUDENT_RECORDS[str(student_id).strip()]["completed_courses"]]
     if "AI" not in str(goal).upper() and "ML" not in str(goal).upper():
-        candidates = ["COMP1020", "COMP2030", "COMP3030"]
+        candidates = [code for code in candidates if "AI/ML" not in CATALOG[code].get("area", "")]
     eligible = []
     blocked = []
     completed = set(STUDENT_RECORDS[str(student_id).strip()]["completed_courses"])
@@ -386,17 +393,25 @@ def recommend_course_plan(student_id: str, goal: str) -> str:
             eligible.append(code)
     if not eligible:
         return "KHÔNG CÓ KẾ HOẠCH HỢP LỆ: " + "; ".join(blocked)
-    total = sum(CATALOG[code]["credits"] for code in eligible)
+    # Ưu tiên các môn nền AI/ML; GenEd chỉ đóng vai trò bù đủ tải tối thiểu.
+    eligible.sort(key=lambda code: ("AI/ML" not in CATALOG[code].get("area", ""), code))
+    selected = []
+    total = 0
+    for code in eligible:
+        credits = CATALOG[code]["credits"]
+        if total + credits <= 18:
+            selected.append(code)
+            total += credits
     if total < 12:
         return (
-            f"CHƯA CÓ KẾ HOẠCH FULL-TIME HỢP LỆ: các môn đủ điều kiện hiện có là {', '.join(eligible)} "
+            f"CHƯA CÓ KẾ HOẠCH FULL-TIME HỢP LỆ: các môn đủ điều kiện hiện có là {', '.join(selected)} "
             f"({total} tín chỉ), thấp hơn mức 12 tín chỉ. Không tự bịa thêm môn ngoài catalog.\n"
             + (f"Môn chưa thể đưa vào kế hoạch: {'; '.join(blocked)}" if blocked else "")
         )
     return (
-        f"Kế hoạch sơ bộ: {', '.join(eligible)}\n"
-        f"{check_schedule_conflicts(eligible)}\n"
-        f"{calculate_credit_load(student_id, eligible)}\n"
+        f"Kế hoạch sơ bộ: {', '.join(selected)}\n"
+        f"{check_schedule_conflicts(selected)}\n"
+        f"{calculate_credit_load(student_id, selected)}\n"
         + (f"Môn chưa thể đưa vào kế hoạch: {'; '.join(blocked)}" if blocked else "")
     )
 

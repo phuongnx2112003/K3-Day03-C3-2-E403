@@ -21,7 +21,7 @@
     "id": 4,
     "category": "🟡 Multi-step (Cần nhiều tool)",
     "question": "Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ dựa trên các môn trong VinUni catalog.",
-    "expected_behavior": "Agent phải lần lượt tra catalog, lọc môn theo hướng học, kiểm prerequisite, kiểm trùng lịch, tính tổng tín chỉ, rồi tổng hợp thành một plan hợp lệ. Nếu có nhiều phương án, chọn phương án tối ưu hơn và giải thích ngắn gọn."
+    "expected_behavior": "Agent phải lần lượt tra hồ sơ, catalog, prerequisite, lịch và tổng tín chỉ trước khi chốt. Với fixture hiện tại, kế hoạch hợp lệ là COMP1020, MATH2010, STAT1010, GENE1010 và GENE1020 (16 tín chỉ); không được tự tạo mã môn ngoài catalog."
   },
   {
     "id": 5,
