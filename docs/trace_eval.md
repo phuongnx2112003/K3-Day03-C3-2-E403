@@ -9,11 +9,11 @@
 
 | Tiêu chí | Điểm (1-5) | Lý do đánh giá thực tế (Mốc 1) |
 | :--- | :---: | :--- |
-| 🧠 **Multi-step Reasoning** | `5/5` | Phải xét ngành học, môn đã tích lũy (Transcript), môn tiên quyết (Prerequisite), hạn mức tín chỉ và lịch học. |
-| 🛠️ **Tool Interaction** | `5/5` | Tự nhiên gọi nhiều tools: tra môn, kiểm môn tiên quyết, kiểm trùng lịch, tính số tín chỉ, tra hồ sơ sinh viên. |
-| 🔀 **Dynamic Decision** | `5/5` | Nếu thiếu môn tiên quyết ➔ tự đổi gợi ý môn; nếu trùng lịch ➔ tự đổi sang section/môn khác hợp lệ. |
-| ⏳ **Long Horizon** | `4/5` | Quy trình gồm 3-5 bước kiểm tra và xử lý ranh giới an toàn (Guardrail) khi gặp mã môn giả hoặc vi phạm quy chế. |
-| **TỔNG ĐIỂM FIT** | **19/20** | **KẾT LUẬN: BÀI TOÁN XUẤT SẮC & RẤT NÊN DÙNG REACT AGENT!** |
+| 🧠 **Multi-step Reasoning** | `4/5` | Phải xét ngành học, môn đã tích lũy (Transcript), môn tiên quyết (Prerequisite), hạn mức tín chỉ và lịch học. |
+| 🛠️ **Tool Interaction** | `4/5` | Tự nhiên gọi nhiều tools: tra môn, kiểm môn tiên quyết, kiểm trùng lịch, tính số tín chỉ, tra hồ sơ sinh viên. |
+| 🔀 **Dynamic Decision** | `3/5` | Nếu thiếu môn tiên quyết ➔ tự đổi gợi ý môn; nếu trùng lịch ➔ tự đổi sang section/môn khác hợp lệ. |
+| ⏳ **Long Horizon** | `3/5` | Quy trình gồm 2-3 bước kiểm tra và xử lý ranh giới an toàn (Guardrail) khi gặp mã môn giả hoặc vi phạm quy chế. |
+| **TỔNG ĐIỂM FIT** | **14/20** | **KẾT LUẬN: BÀI TOÁN NÊN DÙNG REACT AGENT!** |
 
 ---
 
