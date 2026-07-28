@@ -1,34 +1,34 @@
 graph TD
-    A[Sinh viên nhập câu hỏi] --> B{Router / Intent Checker}
+    A["Sinh viên nhập câu hỏi"] --> B{"Router / Intent Checker"}
     
     %% Nhánh Chatbot
-    B -- Câu hỏi lý thuyết / Quy định chung --> C[LLM Baseline]
-    C --> D[Trả lời trực tiếp bằng kiến thức nền]
+    B -- "Câu hỏi lý thuyết" --> C["LLM Baseline"]
+    C --> D["Trả lời trực tiếp bằng kiến thức nền"]
     
     %% Nhánh ReAct Agent
-    B -- Lên kế hoạch / Tra cứu Catalog --> E[ReAct Agent Loop]
-    E --> F{Agent: Thought (Suy luận)}
+    B -- "Yêu cầu lập kế hoạch" --> E["ReAct Agent Loop"]
+    E --> F{"Agent: Thought (Suy luận)"}
     
-    F --> |Cần hành động| G[Action: Chọn Tool trong AVAILABLE_TOOLS]
+    F --> |"Cần gọi Tool"| G["Action: Chọn hàm trong AVAILABLE_TOOLS"]
     
-    G --> |get_student_profile| T1[Lấy tên & danh sách môn đã học]
-    G --> |search_courses| T2[Lọc môn theo keywords]
-    G --> |check_prerequisites| T3[Kiểm tra thiếu môn tiên quyết]
-    G --> |check_schedule_conflicts| T4[Kiểm tra trùng lịch học]
-    G --> |calculate_credit_load| T5[Kiểm tra giới hạn 12-18 tín chỉ]
-    G --> |recommend_course_plan| T6[Gợi ý kế hoạch theo mục tiêu]
+    G --> |"get_student_profile"| T1["Lấy hồ sơ & môn đã học"]
+    G --> |"search_courses"| T2["Tìm môn trong Catalog"]
+    G --> |"check_prerequisites"| T3["Kiểm tra môn tiên quyết"]
+    G --> |"check_schedule_conflicts"| T4["Kiểm tra trùng lịch"]
+    G --> |"calculate_credit_load"| T5["Kiểm tra 12-18 tín chỉ"]
+    G --> |"recommend_course_plan"| T6["Gợi ý kế hoạch mẫu"]
     
-    T1 --> O[Observation]
+    T1 --> O["Observation (Kết quả trả về)"]
     T2 --> O
     T3 --> O
     T4 --> O
     T5 --> O
     T6 --> O
     
-    O --> |Chứa LỖI Guardrail / Thiếu dữ kiện| F
-    O --> |Dữ liệu hợp lệ| F
+    O --> |"Có LỖI / Cần thêm thông tin"| F
+    O --> |"Dữ liệu hợp lệ"| F
     
-    F --> |Đã đủ thông tin & Thỏa Guardrails| M[Final Answer: Tổng hợp kế hoạch]
+    F --> |"Đã đủ dữ kiện & Qua Guardrails"| M["Final Answer: Tổng hợp kế hoạch"]
     
-    D --> Z[Hiển thị cho Sinh viên]
+    D --> Z["Hiển thị cho Sinh viên"]
     M --> Z
