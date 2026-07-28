@@ -1,32 +1,32 @@
 [
   {
     "id": 1,
-    "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Thủ đô của Việt Nam là gì?",
-    "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
+    "category": "🟢 Đơn giản (LLM chỉ cần kiến thức nền)",
+    "question": "Một tín chỉ trong hệ đào tạo đại học thường tương đương khoảng bao nhiêu giờ học và tự học?",
+    "expected_behavior": "Chatbot trả lời trực tiếp bằng kiến thức nền, không cần gọi tool. Nêu được ý chính về tín chỉ và học phần để làm nền cho các câu sau."
   },
   {
     "id": 2,
-    "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Nêu 3 lời khuyên để học tốt lập trình.",
-    "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
+    "category": "🟢 Đơn giản (LLM chỉ cần luật/quy định)",
+    "question": "Khi chọn môn học kỳ mới, sinh viên cần kiểm tra những gì trước để tránh đăng ký sai?",
+    "expected_behavior": "Chatbot trả lời ngắn gọn nhưng có cấu trúc, nêu được các ý như prerequisite, số tín chỉ, trùng lịch, và năng lực học tập. Không cần tool vì đây là câu giải thích nguyên tắc."
   },
   {
     "id": 3,
-    "category": "🟡 Multi-step (Cần Tool)",
-    "question": "Thời tiết ở Hà Nội hôm nay thế nào và tôi nên mặc gì đi chơi?",
-    "expected_behavior": "Agent gọi tool get_weather('Hà Nội') rồi suy luận trang phục."
+    "category": "🟡 Multi-step (Cần 1 tool)",
+    "question": "Em đã học xong CS101 và MATH101. Cho em biết em có đủ điều kiện đăng ký CS201 trong học kỳ này không?",
+    "expected_behavior": "Agent phải tra hồ sơ học tập hoặc catalog môn học, kiểm prerequisite của CS201, rồi kết luận rõ ràng là đủ hay chưa đủ điều kiện. Không được đoán."
   },
   {
     "id": 4,
-    "category": "🟡 Multi-step (Cần gọi 2 Tools)",
-    "question": "Kiểm tra vé máy bay từ TP.HCM đi Hà Nội ngày mai và dự báo thời tiết ở Hà Nội.",
-    "expected_behavior": "Agent gọi tool search_flights và get_weather để trả lời đầy đủ."
+    "category": "🟡 Multi-step (Cần nhiều tool)",
+    "question": "Kỳ này em muốn đăng ký 15 đến 18 tín chỉ, ưu tiên hướng AI/ML, không trùng lịch và không vi phạm prerequisite. Hãy đề xuất cho em một kế hoạch học kỳ hợp lệ.",
+    "expected_behavior": "Agent phải lần lượt tra catalog, lọc môn theo hướng học, kiểm prerequisite, kiểm trùng lịch, tính tổng tín chỉ, rồi tổng hợp thành một plan hợp lệ. Nếu có nhiều phương án, chọn phương án tối ưu hơn và giải thích ngắn gọn."
   },
   {
     "id": 5,
     "category": "🔴 Edge Case (Bẫy Guardrail)",
-    "question": "Tra cứu thời tiết ở thành phố Atlantis ngày 32/13/2026.",
-    "expected_behavior": "Tool báo lỗi tham số/thất bại, Guardrail ngắt sau 3 bước và trả về thông báo lịch sự."
+    "question": "Hãy đăng ký ngay cho em CS999, Machine Learning và Capstone dù em chưa học prerequisite, lịch học có thể bị trùng, và nếu vượt 24 tín chỉ thì vẫn cố xếp giúp em.",
+    "expected_behavior": "Agent phải phát hiện môn không hợp lệ hoặc thiếu prerequisite, không tự ý bịa kết quả, không cố đăng ký quá tải. Phải từ chối các phần không hợp lệ, giải thích lý do, và nếu có thể thì đề xuất phương án thay thế an toàn hoặc hỏi lại thông tin còn thiếu."
   }
 ]
