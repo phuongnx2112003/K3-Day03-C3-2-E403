@@ -7,11 +7,11 @@
 
 | Tiêu chí | Điểm (1-5) | Lý do đánh giá |
 | :--- | :---: | :--- |
-| 🧠 **Multi-step Reasoning** | `4/5` | Cần suy luận từ tra cứu thời tiết đến chọn trang phục. |
-| 🛠️ **Tool Interaction** | `5/5` | Cần tra cứu dữ liệu thời gian thực qua API thời tiết/chuyến bay. |
-| 🔀 **Dynamic Decision** | `4/5` | Kết quả bước trước quyết định hành động bước sau. |
-| ⏳ **Long Horizon** | `3/5` | Quy trình gồm 2-3 bước xử lý ngắn. |
-| **TỔNG ĐIỂM FIT** | **16/20** | **KẾT LUẬN: BÀI TOÁN RẤT NÊN DÙNG REACT AGENT!** |
+| 🧠 **Multi-step Reasoning** | `4/5` | Cần suy luận logic qua nhiều bước: xét ngành, môn đã học, prerequisite, tổng tín chỉ và lịch học. |
+| 🛠️ **Tool Interaction** | `4/5` | Phối hợp liên tục nhiều tool: tra cứu catalog, kiểm tra điều kiện, check trùng lịch, tính tổng tín chỉ. |
+| 🔀 **Dynamic Decision** | `4/5` | Kết quả bước trước thay đổi hoàn toàn bước sau.  |
+| ⏳ **Long Horizon** | `4/5` | Quy trình lập kế hoạch học kỳ đòi hỏi duy trì context qua nhiều lượt duyệt môn và vòng lặp tự sửa sai. |
+| **TỔNG ĐIỂM FIT** | **16/20** | **KẾT LUẬN: BÀI TOÁN PHÙ HỢP ĐỂ XÂY DỰNG MỘT REACT AGENT!** |
 
 ---
 
